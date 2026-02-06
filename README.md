@@ -1,5 +1,8 @@
 # sotto
 
+[![npm version](https://img.shields.io/npm/v/sotto)](https://www.npmjs.com/package/sotto)
+[![license](https://img.shields.io/npm/l/sotto)](./LICENSE)
+
 Voice input for Claude Code. Speak instead of typing.
 
 A local, open-source MCP server that streams your voice to [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for real-time transcription and sends the text to Claude Code. Everything runs on your machine — no cloud APIs, no network calls.

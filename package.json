@@ -31,6 +31,14 @@
     "claude",
     "claude-code"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sourabhbgp/sotto.git"
+  },
+  "homepage": "https://github.com/sourabhbgp/sotto#readme",
+  "bugs": {
+    "url": "https://github.com/sourabhbgp/sotto/issues"
+  },
   "author": "",
   "license": "MIT",
   "dependencies": {
