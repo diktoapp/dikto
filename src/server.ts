@@ -34,7 +34,7 @@ export function createServer(): McpServer {
       try {
         indicator.show("listening");
 
-        const text = await streamTranscribe(
+        const { promise, stop } = await streamTranscribe(
           {
             modelPath: config.modelPath,
             language: language ?? config.language,
@@ -78,6 +78,10 @@ export function createServer(): McpServer {
             },
           }
         );
+
+        indicator.onStop(() => stop());
+
+        const text = await promise;
 
         return {
           content: [

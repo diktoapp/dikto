@@ -149,7 +149,7 @@ describe("stream-transcriber", () => {
 
   describe("streamTranscribe", () => {
     it("should spawn whisper-stream with correct args", async () => {
-      const promise = streamTranscribe(
+      const handlePromise = streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -174,13 +174,14 @@ describe("stream-transcriber", () => {
       ]);
 
       // End the process cleanly
+      const { promise } = await handlePromise;
       mockProc.emit("close", 0);
       const result = await promise;
       expect(result).toBe("[No speech detected]");
     });
 
     it("should accumulate final lines and return them", async () => {
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -189,21 +190,17 @@ describe("stream-transcriber", () => {
         {}
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       mockProc.stdout.emit("data", Buffer.from("Hello world\n"));
       mockProc.stdout.emit("data", Buffer.from("How are you\n"));
       mockProc.emit("close", 0);
 
-      const result = await promise;
+      const result = await handle.promise;
       expect(result).toBe("Hello world How are you");
     });
 
     it("should call onFinal for finalized lines", async () => {
       const onFinal = vi.fn();
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -212,20 +209,16 @@ describe("stream-transcriber", () => {
         { onFinal }
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       mockProc.stdout.emit("data", Buffer.from("Hello\n"));
       expect(onFinal).toHaveBeenCalledWith("Hello");
 
       mockProc.emit("close", 0);
-      await promise;
+      await handle.promise;
     });
 
     it("should call onPartial for partial updates", async () => {
       const onPartial = vi.fn();
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -234,16 +227,12 @@ describe("stream-transcriber", () => {
         { onPartial }
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       // Send a partial (no \n, just \r)
       mockProc.stdout.emit("data", Buffer.from("Hel\r"));
       expect(onPartial).toHaveBeenCalledWith("Hel");
 
       mockProc.emit("close", 0);
-      await promise;
+      await handle.promise;
     });
 
     it("should stop after consecutive blank audio lines", async () => {
@@ -254,7 +243,7 @@ describe("stream-transcriber", () => {
         setTimeout(() => mockProc.emit("close", null), 0);
       });
 
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -264,13 +253,9 @@ describe("stream-transcriber", () => {
         { onSilence }
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       mockProc.stdout.emit("data", Buffer.from("[BLANK_AUDIO]\n[BLANK_AUDIO]\n"));
 
-      const result = await promise;
+      const result = await handle.promise;
       expect(onSilence).toHaveBeenCalled();
       expect(mockKill).toHaveBeenCalledWith("SIGTERM");
       expect(result).toBe("[No speech detected]");
@@ -279,7 +264,7 @@ describe("stream-transcriber", () => {
     it("should reset blank counter on non-blank lines", async () => {
       const onSilence = vi.fn();
 
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -289,17 +274,13 @@ describe("stream-transcriber", () => {
         { onSilence }
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       // Two blanks, then real text, then close
       mockProc.stdout.emit("data", Buffer.from("[BLANK_AUDIO]\n[BLANK_AUDIO]\n"));
       mockProc.stdout.emit("data", Buffer.from("Hello\n"));
       expect(onSilence).not.toHaveBeenCalled();
 
       mockProc.emit("close", 0);
-      const result = await promise;
+      const result = await handle.promise;
       expect(result).toBe("Hello");
     });
 
@@ -310,7 +291,7 @@ describe("stream-transcriber", () => {
         setTimeout(() => mockProc.emit("close", null), 0);
       });
 
-      const promise = streamTranscribe(
+      const handlePromise = streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -322,6 +303,8 @@ describe("stream-transcriber", () => {
       // Advance past the "which" command resolution
       await vi.advanceTimersByTimeAsync(10);
 
+      const handle = await handlePromise;
+
       // Advance past maxDuration
       await vi.advanceTimersByTimeAsync(5000);
 
@@ -330,14 +313,14 @@ describe("stream-transcriber", () => {
       // Let the close event fire
       await vi.advanceTimersByTimeAsync(10);
 
-      const result = await promise;
+      const result = await handle.promise;
       expect(result).toBe("[No speech detected]");
 
       vi.useRealTimers();
     });
 
     it("should handle process error", async () => {
-      const promise = streamTranscribe(
+      const handle = await streamTranscribe(
         {
           modelPath: "/path/to/model.bin",
           language: "en",
@@ -346,13 +329,56 @@ describe("stream-transcriber", () => {
         {}
       );
 
-      await vi.waitFor(() => {
-        expect(spawnCalls.some((c) => c.cmd === "whisper-stream")).toBe(true);
-      });
-
       mockProc.emit("error", new Error("spawn failed"));
 
-      await expect(promise).rejects.toThrow("whisper-stream error: spawn failed");
+      await expect(handle.promise).rejects.toThrow("whisper-stream error: spawn failed");
+    });
+
+    it("should return a stop function that SIGTERMs the process", async () => {
+      mockKill.mockImplementation(() => {
+        setTimeout(() => mockProc.emit("close", null), 0);
+      });
+
+      const handle = await streamTranscribe(
+        {
+          modelPath: "/path/to/model.bin",
+          language: "en",
+          maxDuration: 30,
+        },
+        {}
+      );
+
+      // Emit some speech first
+      mockProc.stdout.emit("data", Buffer.from("Hello world\n"));
+
+      // Call the external stop
+      handle.stop();
+
+      expect(mockKill).toHaveBeenCalledWith("SIGTERM");
+
+      const result = await handle.promise;
+      expect(result).toBe("Hello world");
+    });
+
+    it("should resolve with accumulated text when stop is called", async () => {
+      mockKill.mockImplementation(() => {
+        setTimeout(() => mockProc.emit("close", null), 0);
+      });
+
+      const handle = await streamTranscribe(
+        {
+          modelPath: "/path/to/model.bin",
+          language: "en",
+          maxDuration: 30,
+        },
+        {}
+      );
+
+      // No speech — stop immediately
+      handle.stop();
+
+      const result = await handle.promise;
+      expect(result).toBe("[No speech detected]");
     });
   });
 });

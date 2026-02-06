@@ -54,10 +54,15 @@ export function parseStreamChunk(raw: string): { segments: Array<{ text: string;
   return { segments };
 }
 
+export interface StreamTranscribeHandle {
+  promise: Promise<string>;
+  stop: () => void;
+}
+
 export async function streamTranscribe(
   options: StreamTranscriptionOptions,
   callbacks: StreamCallbacks = {}
-): Promise<string> {
+): Promise<StreamTranscribeHandle> {
   // Check that whisper-stream is available
   await checkWhisperStream();
   await checkModel(options.modelPath);
@@ -76,7 +81,9 @@ export async function streamTranscribe(
     "-kc",
   ];
 
-  return new Promise<string>((resolve, reject) => {
+  let externalStop: () => void;
+
+  const promise = new Promise<string>((resolve, reject) => {
     let proc: ChildProcess;
     try {
       proc = spawn("whisper-stream", args, {
@@ -101,6 +108,8 @@ export async function streamTranscribe(
         // process may have already exited
       }
     }
+
+    externalStop = stop;
 
     // maxDuration timeout
     const timeout = setTimeout(() => {
@@ -171,6 +180,19 @@ export async function streamTranscribe(
 
     proc.on("close", (code) => {
       clearTimeout(timeout);
+
+      // Flush any remaining buffer content (last words before SIGTERM)
+      if (buffer.length > 0) {
+        const { segments } = parseStreamChunk(buffer + "\n");
+        for (const seg of segments) {
+          if (!seg.isBlank) {
+            finalLines.push(seg.text);
+            callbacks.onFinal?.(seg.text);
+          }
+        }
+        buffer = "";
+      }
+
       const text = finalLines.join(" ").trim() || "[No speech detected]";
       // SIGTERM exit (null or 143) is expected
       if (code !== 0 && code !== null && code !== 143 && !stopped) {
@@ -180,6 +202,8 @@ export async function streamTranscribe(
       resolve(text);
     });
   });
+
+  return { promise, stop: externalStop! };
 }
 
 function checkWhisperStream(): Promise<void> {

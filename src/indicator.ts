@@ -13,7 +13,7 @@ function createWindow() {
   var x = (sf.size.width - width) / 2;
   var y = 48;
 
-  var win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
+  var win = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(x, y, width, height),
     $.NSWindowStyleMaskBorderless | $.NSWindowStyleMaskNonactivatingPanel,
     $.NSBackingStoreBuffered,
@@ -21,10 +21,10 @@ function createWindow() {
   );
 
   win.setLevel($.CGWindowLevelForKey($.kCGMaximumWindowLevelKey));
+  win.setFloatingPanel(true);
   win.setOpaque(false);
   win.setBackgroundColor($.NSColor.clearColor);
   win.setHasShadow(true);
-  win.setIgnoresMouseEvents(true);
   win.setHidesOnDeactivate(false);
   win.setCollectionBehavior(
     $.NSWindowCollectionBehaviorCanJoinAllSpaces |
@@ -50,10 +50,21 @@ function createWindow() {
 
   var labelHeight = 18;
   var label = $.NSTextField.labelWithString($("Listening..."));
-  label.setFrame($.NSMakeRect(32, height - 26, width - 48, labelHeight));
+  label.setFrame($.NSMakeRect(32, height - 26, width - 72, labelHeight));
   label.setTextColor($.NSColor.whiteColor);
   label.setFont($.NSFont.systemFontOfSizeWeight(13, 0.5));
   view.addSubview(label);
+
+  var btnSize = 24;
+  var stopBtn = $.NSButton.alloc.initWithFrame(
+    $.NSMakeRect(width - btnSize - 12, height - 26, btnSize, btnSize)
+  );
+  stopBtn.setBezelStyle($.NSBezelStyleInline);
+  stopBtn.setBordered(false);
+  stopBtn.setTitle($("\\u25A0"));
+  stopBtn.setFont($.NSFont.systemFontOfSizeWeight(14, 0.4));
+  stopBtn.setContentTintColor($.NSColor.colorWithSRGBRedGreenBlueAlpha(0.85, 0.85, 0.85, 1.0));
+  view.addSubview(stopBtn);
 
   var textLabel = $.NSTextField.labelWithString($(""));
   textLabel.setFrame($.NSMakeRect(16, 6, width - 32, 18));
@@ -64,7 +75,7 @@ function createWindow() {
 
   win.orderFrontRegardless;
 
-  return { win: win, dot: dot, label: label, textLabel: textLabel };
+  return { win: win, dot: dot, label: label, textLabel: textLabel, stopBtn: stopBtn };
 }
 
 function applyStatus(ui, status) {
@@ -77,52 +88,105 @@ function applyStatus(ui, status) {
   }
 }
 
-function run() {
-  var app = $.NSApplication.sharedApplication;
-  app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+function writeStdout(str) {
+  var data = $.NSString.alloc.initWithUTF8String(str).dataUsingEncoding($.NSUTF8StringEncoding);
+  $.NSFileHandle.fileHandleWithStandardOutput.writeData(data);
+}
 
-  var ui = createWindow();
-  var rl = $.NSRunLoop.currentRunLoop;
-  var stdin = $.NSFileHandle.fileHandleWithStandardInput;
-  var buf = "";
-  var done = false;
-  var lastActivity = $.NSDate.date;
-  var MAX_IDLE_SECONDS = 120;
+// Shared state
+var _ui = null;
+var _buf = "";
+var _lastActivity = null;
+var _MAX_IDLE_SECONDS = 120;
+var _app = null;
 
-  while (!done) {
-    // Pump the run loop so AppKit renders the window
-    rl.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.1));
+function shutdown() {
+  if (_ui) { _ui.win.close; }
+  _app.stop($.nil);
+}
 
-    // Watchdog: auto-close if no stdin activity (parent likely dead)
-    var elapsed = -lastActivity.timeIntervalSinceNow;
-    if (elapsed > MAX_IDLE_SECONDS) { done = true; break; }
+function processStdinData(data) {
+  if (data.length === 0) { shutdown(); return; }
 
-    var data = stdin.availableData;
-    if (data.length === 0) { done = true; break; }
+  _lastActivity = $.NSDate.date;
+  var str = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
+  _buf += str;
+  var lines = _buf.split("\\n");
+  _buf = lines.pop();
 
-    lastActivity = $.NSDate.date;
-    var str = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
-    buf += str;
-    var lines = buf.split("\\n");
-    buf = lines.pop();
-
-    for (var i = 0; i < lines.length; i++) {
-      var cmd = lines[i].trim();
-      if (cmd === "close") { done = true; break; }
-      if (cmd === "listening" || cmd === "transcribing") {
-        applyStatus(ui, cmd);
-      } else if (cmd.indexOf("text:") === 0) {
-        var content = cmd.substring(5);
-        if (content.length > 50) {
-          content = "\\u2026" + content.substring(content.length - 50);
-        }
-        ui.textLabel.setStringValue($(content));
+  for (var i = 0; i < lines.length; i++) {
+    var cmd = lines[i].trim();
+    if (cmd === "close") { shutdown(); return; }
+    if (cmd === "listening" || cmd === "transcribing") {
+      applyStatus(_ui, cmd);
+    } else if (cmd.indexOf("text:") === 0) {
+      var content = cmd.substring(5);
+      if (content.length > 50) {
+        content = "\\u2026" + content.substring(content.length - 50);
       }
+      _ui.textLabel.setStringValue($(content));
     }
   }
 
-  ui.win.close;
-  rl.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05));
+  // Re-register for next data notification
+  $.NSFileHandle.fileHandleWithStandardInput.waitForDataInBackgroundAndNotify;
+}
+
+ObjC.registerSubclass({
+  name: "StopHandler",
+  methods: {
+    "stopClicked:": {
+      types: ["void", ["id"]],
+      implementation: function(sender) {
+        writeStdout("stopped\\n");
+        shutdown();
+      }
+    },
+    "stdinDataAvailable:": {
+      types: ["void", ["id"]],
+      implementation: function(notification) {
+        var fh = notification.object;
+        var data = fh.availableData;
+        processStdinData(data);
+      }
+    },
+    "watchdog:": {
+      types: ["void", ["id"]],
+      implementation: function(timer) {
+        var elapsed = -_lastActivity.timeIntervalSinceNow;
+        if (elapsed > _MAX_IDLE_SECONDS) { shutdown(); }
+      }
+    }
+  }
+});
+
+function run() {
+  _app = $.NSApplication.sharedApplication;
+  _app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+
+  _ui = createWindow();
+  _lastActivity = $.NSDate.date;
+
+  var handler = $.StopHandler.alloc.init;
+
+  // Wire stop button
+  _ui.stopBtn.target = handler;
+  _ui.stopBtn.action = "stopClicked:";
+
+  // Async stdin reading — does not block the event loop
+  var stdin = $.NSFileHandle.fileHandleWithStandardInput;
+  $.NSNotificationCenter.defaultCenter.addObserverSelectorNameObject(
+    handler, "stdinDataAvailable:", $.NSFileHandleDataAvailableNotification, stdin
+  );
+  stdin.waitForDataInBackgroundAndNotify;
+
+  // Watchdog timer for idle timeout
+  $.NSTimer.scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(
+    5.0, handler, "watchdog:", $.nil, true
+  );
+
+  // app.run properly processes UI events (button clicks)
+  _app.run;
 }
 
 run();
@@ -130,11 +194,12 @@ run();
 
 export class StatusIndicator {
   private proc: ChildProcess | null = null;
+  private stopCallbacks: Array<() => void> = [];
 
   show(status: IndicatorStatus): void {
     try {
       this.proc = spawn("osascript", ["-l", "JavaScript", "-e", JXA_SCRIPT], {
-        stdio: ["pipe", "ignore", "ignore"],
+        stdio: ["pipe", "pipe", "ignore"],
       });
 
       this.proc.on("error", () => {
@@ -145,10 +210,29 @@ export class StatusIndicator {
         this.proc = null;
       });
 
+      // Listen for "stopped" from JXA stdout (stop button clicked)
+      let stdoutBuf = "";
+      this.proc.stdout?.on("data", (data: Buffer) => {
+        stdoutBuf += data.toString();
+        const lines = stdoutBuf.split("\n");
+        stdoutBuf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim() === "stopped") {
+            for (const cb of this.stopCallbacks) {
+              try { cb(); } catch { /* ignore */ }
+            }
+          }
+        }
+      });
+
       this.proc.stdin?.write(status + "\n");
     } catch {
       this.proc = null;
     }
+  }
+
+  onStop(callback: () => void): void {
+    this.stopCallbacks.push(callback);
   }
 
   update(status: IndicatorStatus): void {

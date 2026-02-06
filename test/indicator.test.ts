@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 
 // Mock child_process
 const mockStdinWrite = vi.fn().mockReturnValue(true);
 const mockKill = vi.fn();
-let mockProc: Partial<ChildProcess> & { exitCode: number | null };
+let mockProc: Partial<ChildProcess> & { exitCode: number | null; stdout: EventEmitter };
 
 vi.mock("node:child_process", () => {
   const EventEmitter = require("node:events");
@@ -13,7 +14,7 @@ vi.mock("node:child_process", () => {
     spawn: vi.fn(() => {
       const proc = new EventEmitter();
       proc.stdin = { write: mockStdinWrite };
-      proc.stdout = null;
+      proc.stdout = new EventEmitter();
       proc.stderr = null;
       proc.kill = mockKill;
       proc.exitCode = null;
@@ -40,7 +41,7 @@ describe("StatusIndicator", () => {
       expect(spawn).toHaveBeenCalledWith(
         "osascript",
         ["-l", "JavaScript", "-e", expect.any(String)],
-        { stdio: ["pipe", "ignore", "ignore"] }
+        { stdio: ["pipe", "pipe", "ignore"] }
       );
     });
 
@@ -164,6 +165,68 @@ describe("StatusIndicator", () => {
       expect(mockKill).not.toHaveBeenCalled();
 
       vi.useRealTimers();
+    });
+  });
+
+  describe("onStop", () => {
+    it("should fire callback when stdout emits 'stopped'", () => {
+      const indicator = new StatusIndicator();
+      const cb = vi.fn();
+      indicator.onStop(cb);
+      indicator.show("listening");
+
+      mockProc.stdout.emit("data", Buffer.from("stopped\n"));
+
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it("should fire multiple callbacks", () => {
+      const indicator = new StatusIndicator();
+      const cb1 = vi.fn();
+      const cb2 = vi.fn();
+      indicator.onStop(cb1);
+      indicator.onStop(cb2);
+      indicator.show("listening");
+
+      mockProc.stdout.emit("data", Buffer.from("stopped\n"));
+
+      expect(cb1).toHaveBeenCalledTimes(1);
+      expect(cb2).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not fire callback for other stdout data", () => {
+      const indicator = new StatusIndicator();
+      const cb = vi.fn();
+      indicator.onStop(cb);
+      indicator.show("listening");
+
+      mockProc.stdout.emit("data", Buffer.from("something else\n"));
+
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it("should handle partial stdout buffering", () => {
+      const indicator = new StatusIndicator();
+      const cb = vi.fn();
+      indicator.onStop(cb);
+      indicator.show("listening");
+
+      // Send "stopped\n" in two chunks
+      mockProc.stdout.emit("data", Buffer.from("stop"));
+      expect(cb).not.toHaveBeenCalled();
+
+      mockProc.stdout.emit("data", Buffer.from("ped\n"));
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not throw if callback throws", () => {
+      const indicator = new StatusIndicator();
+      indicator.onStop(() => { throw new Error("boom"); });
+      indicator.show("listening");
+
+      expect(() => {
+        mockProc.stdout.emit("data", Buffer.from("stopped\n"));
+      }).not.toThrow();
     });
   });
 
