@@ -47,25 +47,20 @@ function buildWav(chunks: Int16Array[]): Buffer {
   return buffer;
 }
 
-export function checkSpeechRecorder(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    try {
-      // Verify the native addon loads by constructing a temporary instance
-      const test = new SpeechRecorder({ sampleRate: SAMPLE_RATE });
-      test.stop();
-      resolve();
-    } catch (err) {
-      reject(
-        new Error(
-          "speech-recorder native addon failed to load. Try reinstalling: npm rebuild speech-recorder"
-        )
-      );
-    }
-  });
+export function checkSpeechRecorder(): void {
+  // Verify the native addon loaded successfully via the static import.
+  // We avoid creating a temporary SpeechRecorder instance because
+  // constructing and stopping one prevents subsequent instances from
+  // working (native addon segfault).
+  if (typeof SpeechRecorder !== "function") {
+    throw new Error(
+      "speech-recorder native addon failed to load. Try reinstalling: npm rebuild speech-recorder"
+    );
+  }
 }
 
 export async function record(options: RecordingOptions): Promise<RecordingResult> {
-  await checkSpeechRecorder();
+  checkSpeechRecorder();
 
   const tempDir = await mkdtemp(join(tmpdir(), "sotto-"));
   const filePath = join(tempDir, "recording.wav");

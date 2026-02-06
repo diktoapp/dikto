@@ -53,8 +53,8 @@ beforeEach(() => {
 
 describe("recorder", () => {
   describe("checkSpeechRecorder", () => {
-    it("should resolve when speech-recorder native addon loads", async () => {
-      await expect(checkSpeechRecorder()).resolves.toBeUndefined();
+    it("should not throw when speech-recorder native addon loads", () => {
+      expect(() => checkSpeechRecorder()).not.toThrow();
     });
   });
 
@@ -180,11 +180,8 @@ describe("recorder", () => {
 
     it("should reject if recorder.start() throws", async () => {
       const { SpeechRecorder } = await import("speech-recorder");
-      // First call: checkSpeechRecorder() — let it succeed
-      vi.mocked(SpeechRecorder).mockImplementationOnce(() => {
-        return { start: vi.fn(), stop: vi.fn() } as any;
-      });
-      // Second call: actual recording — throw on start
+      // checkSpeechRecorder() no longer creates an instance, so only
+      // one mock is needed for the actual recording instance.
       vi.mocked(SpeechRecorder).mockImplementationOnce((options: SpeechRecorderOptions) => {
         capturedOptions = options;
         mockStart = vi.fn(() => {

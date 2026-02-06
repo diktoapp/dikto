@@ -79,14 +79,21 @@ function run() {
   var stdin = $.NSFileHandle.fileHandleWithStandardInput;
   var buf = "";
   var done = false;
+  var lastActivity = $.NSDate.date;
+  var MAX_IDLE_SECONDS = 120;
 
   while (!done) {
     // Pump the run loop so AppKit renders the window
     rl.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.1));
 
+    // Watchdog: auto-close if no stdin activity (parent likely dead)
+    var elapsed = -lastActivity.timeIntervalSinceNow;
+    if (elapsed > MAX_IDLE_SECONDS) { done = true; break; }
+
     var data = stdin.availableData;
     if (data.length === 0) { done = true; break; }
 
+    lastActivity = $.NSDate.date;
     var str = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
     buf += str;
     var lines = buf.split("\\n");
@@ -140,24 +147,25 @@ export class StatusIndicator {
   }
 
   close(): void {
+    const proc = this.proc;
+    this.proc = null;
+
+    if (!proc || proc.exitCode !== null) return;
+
     try {
-      this.proc?.stdin?.write("close\n");
+      proc.stdin?.write("close\n");
+      proc.stdin?.end();
     } catch {
       // silent no-op
     }
 
-    const proc = this.proc;
-    this.proc = null;
-
     // Safety timeout: force-kill if osascript didn't exit
-    if (proc && proc.exitCode === null) {
-      setTimeout(() => {
-        try {
-          proc.kill();
-        } catch {
-          // silent no-op
-        }
-      }, 500);
-    }
+    setTimeout(() => {
+      try {
+        if (proc.exitCode === null) proc.kill("SIGKILL");
+      } catch {
+        // silent no-op
+      }
+    }, 500);
   }
 }
