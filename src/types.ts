@@ -2,14 +2,14 @@ export interface WhisperConfig {
   modelPath: string;
   language: string;
   maxDuration: number;
-  silenceDuration: number;
-  silenceThreshold: string;
+  consecutiveFramesForSilence: number;
+  sileroVadSpeakingThreshold: number;
 }
 
 export interface RecordingOptions {
   maxDuration: number;
-  silenceDuration: number;
-  silenceThreshold: string;
+  consecutiveFramesForSilence: number;
+  sileroVadSpeakingThreshold: number;
 }
 
 export interface RecordingResult {

@@ -33,8 +33,8 @@ export function createServer(): McpServer {
 
       const recordingOptions = {
         maxDuration: maxDuration ?? config.maxDuration,
-        silenceDuration: config.silenceDuration,
-        silenceThreshold: config.silenceThreshold,
+        consecutiveFramesForSilence: config.consecutiveFramesForSilence,
+        sileroVadSpeakingThreshold: config.sileroVadSpeakingThreshold,
       };
 
       const transcriptionOptions = {
@@ -66,12 +66,12 @@ export function createServer(): McpServer {
           error instanceof Error ? error.message : String(error);
 
         // Provide user-friendly error messages
-        if (message.includes("sox is not installed") || message.includes("rec")) {
+        if (message.includes("speech-recorder native addon failed to load")) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: "sox is not installed. Install it with: brew install sox",
+                text: "speech-recorder native addon failed to load. Try reinstalling: npm rebuild speech-recorder",
               },
             ],
             isError: true,

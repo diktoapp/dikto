@@ -12,8 +12,8 @@ const DEFAULTS: WhisperConfig = {
   modelPath: DEFAULT_MODEL_PATH,
   language: "en",
   maxDuration: 30,
-  silenceDuration: 2,
-  silenceThreshold: "3%",
+  consecutiveFramesForSilence: 200,
+  sileroVadSpeakingThreshold: 0.5,
 };
 
 async function loadConfigFile(): Promise<Partial<WhisperConfig>> {

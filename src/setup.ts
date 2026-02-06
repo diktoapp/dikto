@@ -115,11 +115,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Check sox
-  if (checkCommand("rec")) {
-    logOk("sox (rec command available)");
-  } else {
-    logFail("sox not found — install with: brew install sox");
+  // Check speech-recorder
+  try {
+    await import("speech-recorder");
+    logOk("speech-recorder (native addon loaded)");
+  } catch {
+    logFail("speech-recorder native addon failed to load — try: npm rebuild speech-recorder");
     process.exit(1);
   }
 
@@ -161,8 +162,8 @@ async function main() {
           modelPath: DEFAULT_MODEL_PATH,
           language: "en",
           maxDuration: 30,
-          silenceDuration: 2,
-          silenceThreshold: "3%",
+          consecutiveFramesForSilence: 200,
+          sileroVadSpeakingThreshold: 0.5,
         },
         null,
         2
