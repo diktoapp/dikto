@@ -1,6 +1,6 @@
 {
   "name": "sotto",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Voice input for Claude Code — real-time local speech-to-text via whisper.cpp",
   "type": "module",
   "main": "dist/index.js",
