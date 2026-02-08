@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the Sotto macOS menu bar app
 # Compiles Swift sources + links against libsotto_core.a
-# Bundles ONNX Runtime dylib for Parakeet TDT inference
+# ONNX Runtime is statically linked into libsotto_core.a (no dylib needed)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -9,7 +9,6 @@ BUILD_DIR="$ROOT/build"
 APP_DIR="$BUILD_DIR/Sotto.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
-FRAMEWORKS_DIR="$CONTENTS/Frameworks"
 
 GENERATED="$ROOT/SottoApp/Generated"
 SOURCES="$ROOT/SottoApp/Sources"
@@ -26,40 +25,12 @@ if [ ! -f "$RUST_LIB" ]; then
     exit 1
 fi
 
-# Find ONNX Runtime dylib (bundled by ort crate)
-ORT_DYLIB=""
-for candidate in \
-    "$ROOT/target/release/libonnxruntime.dylib" \
-    "$ROOT/target/release/build"/ort-sys-*/out/lib/libonnxruntime.dylib \
-    "$ROOT/target/release/build"/ort-sys-*/out/onnxruntime/lib/libonnxruntime.dylib; do
-    if [ -f "$candidate" ]; then
-        ORT_DYLIB="$candidate"
-        break
-    fi
-done
-
-if [ -z "$ORT_DYLIB" ]; then
-    echo "Warning: ONNX Runtime dylib not found. App may fail at runtime."
-    echo "  Looked in target/release/ and target/release/build/ort-sys-*/out/"
-fi
-
 # Create app bundle structure
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$CONTENTS/Resources" "$FRAMEWORKS_DIR"
+mkdir -p "$MACOS_DIR" "$CONTENTS/Resources"
 
 # Copy Info.plist
 cp "$ROOT/SottoApp/Resources/Info.plist" "$CONTENTS/Info.plist"
-
-# Copy ONNX Runtime dylib to Frameworks
-if [ -n "$ORT_DYLIB" ]; then
-    cp "$ORT_DYLIB" "$FRAMEWORKS_DIR/"
-    # Also copy any versioned dylibs (e.g. libonnxruntime.1.21.0.dylib)
-    ORT_DIR="$(dirname "$ORT_DYLIB")"
-    for f in "$ORT_DIR"/libonnxruntime.*.dylib; do
-        [ -f "$f" ] && cp "$f" "$FRAMEWORKS_DIR/"
-    done
-    echo "Bundled ONNX Runtime from $ORT_DYLIB"
-fi
 
 echo "Compiling Swift sources..."
 
@@ -86,7 +57,6 @@ swiftc \
     -I "$GENERATED" \
     "$RUST_LIB" \
     -Xlinker -lc++ \
-    -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -Xlinker -framework -Xlinker Accelerate \
     -Xlinker -framework -Xlinker CoreAudio \
     -Xlinker -framework -Xlinker AudioToolbox \
@@ -100,11 +70,6 @@ swiftc \
     -framework SwiftUI \
     -o "$MACOS_DIR/SottoApp" \
     "${SWIFT_FILES[@]}"
-
-# Fix ONNX Runtime dylib install name if bundled
-if [ -n "$ORT_DYLIB" ] && [ -f "$FRAMEWORKS_DIR/libonnxruntime.dylib" ]; then
-    install_name_tool -id @rpath/libonnxruntime.dylib "$FRAMEWORKS_DIR/libonnxruntime.dylib" 2>/dev/null || true
-fi
 
 # Remove extended attributes and ad-hoc code sign
 xattr -cr "$APP_DIR"

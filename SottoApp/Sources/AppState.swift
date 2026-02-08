@@ -83,18 +83,11 @@ final class AppState: ObservableObject {
     @Published var models: [ModelInfoRecord] = []
     @Published var config: SottoConfig?
     @Published var modelLoaded = false
-    @Published var transcriptHistory: [TranscriptEntry] = []
     let overlayController = RecordingOverlayController()
     private var engine: SottoEngine?
     private var sessionHandle: SessionHandle?
     private var activeCallback: AppCallback?
     private var hotKeyRef: EventHotKeyRef?
-
-    struct TranscriptEntry: Identifiable {
-        let id = UUID()
-        let text: String
-        let date: Date
-    }
 
     init() {
         loadEngine()
@@ -239,10 +232,6 @@ final class AppState: ObservableObject {
         guard !cleaned.isEmpty else { return }
         finalText = cleaned
         partialText = ""
-
-        // In-memory history for this session only
-        transcriptHistory.insert(TranscriptEntry(text: cleaned, date: Date()), at: 0)
-        if transcriptHistory.count > 50 { transcriptHistory.removeLast() }
 
         // Auto-copy / auto-paste
         let cfg = config ?? engine?.getConfig()

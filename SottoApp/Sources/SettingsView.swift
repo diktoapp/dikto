@@ -18,7 +18,7 @@ struct SettingsView: View {
                     Label("Models", systemImage: "cpu")
                 }
         }
-        .frame(width: 450, height: 300)
+        .frame(width: 420, height: 320)
     }
 }
 
@@ -29,48 +29,65 @@ struct GeneralSettingsView: View {
     @State private var maxDuration: Double = 30
     @State private var silenceDuration: Double = 1500
     @State private var launchAtLogin = false
+    @State private var loaded = false
 
     var body: some View {
-        Form {
-            Section("Startup") {
-                Toggle("Launch Sotto at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { setLaunchAtLogin(launchAtLogin) }
-            }
-
-            Section("Clipboard") {
-                Toggle("Auto-copy transcription to clipboard", isOn: $autoCopy)
-                    .onChange(of: autoCopy) { saveSettings() }
-                Toggle("Auto-paste after recording", isOn: $autoPaste)
-                    .onChange(of: autoPaste) { saveSettings() }
-
-            }
-
-            Section("Recording") {
-                HStack {
-                    Text("Max duration:")
-                    Slider(value: $maxDuration, in: 5...120, step: 5) {
-                        Text("Max duration")
-                    }
-                    .onChange(of: maxDuration) { saveSettings() }
-                    Text("\(Int(maxDuration))s")
-                        .monospacedDigit()
-                        .frame(width: 40)
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    Toggle("Launch Sotto at login", isOn: $launchAtLogin)
+                        .onChange(of: launchAtLogin) { guard loaded else { return }; setLaunchAtLogin(launchAtLogin) }
                 }
 
-                HStack {
-                    Text("Silence timeout:")
-                    Slider(value: $silenceDuration, in: 500...5000, step: 250) {
-                        Text("Silence timeout")
+                Section {
+                    Toggle("Copy result to clipboard", isOn: $autoCopy)
+                        .onChange(of: autoCopy) { guard loaded else { return }; saveSettings() }
+                        .disabled(autoPaste)
+                    Toggle("Auto-paste into active app", isOn: $autoPaste)
+                        .onChange(of: autoPaste) {
+                            guard loaded else { return }
+                            if autoPaste { autoCopy = true }
+                            saveSettings()
+                        }
+                }
+
+                Section {
+                    LabeledContent("Max duration") {
+                        HStack(spacing: 8) {
+                            Slider(value: $maxDuration, in: 5...120, step: 5)
+                                .onChange(of: maxDuration) { guard loaded else { return }; saveSettings() }
+                                .frame(maxWidth: 160)
+                            Text("\(Int(maxDuration))s")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(width: 40, alignment: .trailing)
+                        }
                     }
-                    .onChange(of: silenceDuration) { saveSettings() }
-                    Text("\(Int(silenceDuration))ms")
-                        .monospacedDigit()
-                        .frame(width: 60)
+
+                    LabeledContent("Silence timeout") {
+                        HStack(spacing: 8) {
+                            Slider(value: $silenceDuration, in: 500...5000, step: 250)
+                                .onChange(of: silenceDuration) { guard loaded else { return }; saveSettings() }
+                                .frame(maxWidth: 160)
+                            Text(formatMs(Int(silenceDuration)))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                    }
                 }
             }
+            .formStyle(.grouped)
         }
-        .padding()
         .onAppear { loadSettings() }
+        .onReceive(appState.$config) { _ in if !loaded { loadSettings() } }
+    }
+
+    private func formatMs(_ ms: Int) -> String {
+        if ms >= 1000 && ms % 1000 == 0 {
+            return "\(ms / 1000)s"
+        }
+        return String(format: "%.1fs", Double(ms) / 1000.0)
     }
 
     private func loadSettings() {
@@ -80,6 +97,7 @@ struct GeneralSettingsView: View {
         maxDuration = Double(cfg.maxDuration)
         silenceDuration = Double(cfg.silenceDurationMs)
         loadLaunchAtLogin()
+        loaded = true
     }
 
     private func loadLaunchAtLogin() {
@@ -95,7 +113,6 @@ struct GeneralSettingsView: View {
             }
         } catch {
             NSLog("[Sotto] Launch at login error: \(error)")
-            // Revert toggle on failure
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
@@ -120,54 +137,77 @@ struct ModelsSettingsView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Available Models")
-                .font(.headline)
+        VStack(spacing: 0) {
+            List {
+                ForEach(appState.models, id: \.name) { model in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(model.name)
+                                    .fontWeight(isActive(model) ? .semibold : .regular)
+                                if isActive(model) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                        .font(.caption)
+                                }
+                            }
+                            Text(model.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
 
-            List(appState.models, id: \.name) { model in
-                HStack {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(model.name)
-                                .fontWeight(model.name == appState.config?.modelName ? .bold : .regular)
-                            if model.name == appState.config?.modelName {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
+                        Spacer()
+
+                        Text(formatSize(model.sizeMb))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        if model.isDownloaded {
+                            if !isActive(model) {
+                                Button("Use") {
+                                    appState.switchModel(name: model.name)
+                                }
+                                .controlSize(.small)
+                            } else {
+                                Text("Active")
                                     .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
+                        } else {
+                            Text("Not downloaded")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
                         }
-                        Text(model.description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer()
-
-                    Text("\(model.sizeMb) MB")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if model.isDownloaded {
-                        if model.name != appState.config?.modelName {
-                            Button("Use") {
-                                appState.switchModel(name: model.name)
-                            }
-                            .controlSize(.small)
-                        }
-                    } else {
-                        Text("Not downloaded")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
 
-            Text("Download models via terminal: sotto --setup")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Download models via terminal:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("sotto --setup")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding()
         .onAppear { appState.refreshModels() }
+    }
+
+    private func isActive(_ model: ModelInfoRecord) -> Bool {
+        model.name == appState.config?.modelName
+    }
+
+    private func formatSize(_ mb: UInt32) -> String {
+        if mb >= 1024 {
+            return String(format: "%.1f GB", Double(mb) / 1024.0)
+        }
+        return "\(mb) MB"
     }
 }
