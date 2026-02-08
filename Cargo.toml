@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/sotto-core", "crates/sotto-mcp"]
+members = ["crates/sotto-core", "crates/sotto-mcp", "crates/uniffi-bindgen"]
 resolver = "2"
 
 [workspace.package]

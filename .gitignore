@@ -4,3 +4,5 @@ dist/
 .DS_Store
 temp/
 target/
+build/
+whisper-cpp

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tracing::warn;
 
 /// Configuration for Sotto, backward-compatible with v1 paths.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct SottoConfig {
     #[serde(default = "default_model_name")]
     pub model_name: String,
@@ -23,8 +23,8 @@ pub struct SottoConfig {
     pub auto_copy: bool,
 }
 
-fn default_model_name() -> String {
-    "base.en".to_string()
+pub fn default_model_name() -> String {
+    "parakeet-tdt-0.6b-v2".to_string()
 }
 
 fn default_language() -> String {
@@ -40,7 +40,7 @@ fn default_silence_duration_ms() -> u32 {
 }
 
 fn default_speech_threshold() -> f32 {
-    0.5
+    0.35
 }
 
 fn default_true() -> bool {
@@ -64,16 +64,16 @@ impl Default for SottoConfig {
 
 /// Returns the config directory path: ~/.config/sotto/
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("sotto")
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".config/sotto")
 }
 
 /// Returns the data directory path: ~/.local/share/sotto/
 pub fn data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.local/share"))
-        .join("sotto")
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".local/share/sotto")
 }
 
 /// Returns the models directory path: ~/.local/share/sotto/models/
@@ -142,11 +142,11 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = SottoConfig::default();
-        assert_eq!(config.model_name, "base.en");
+        assert_eq!(config.model_name, "parakeet-tdt-0.6b-v2");
         assert_eq!(config.language, "en");
         assert_eq!(config.max_duration, 30);
         assert_eq!(config.silence_duration_ms, 1500);
-        assert!((config.speech_threshold - 0.5).abs() < f32::EPSILON);
+        assert!((config.speech_threshold - 0.35).abs() < f32::EPSILON);
         assert!(config.auto_paste);
         assert!(config.auto_copy);
     }

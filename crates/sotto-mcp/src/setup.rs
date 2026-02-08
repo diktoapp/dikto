@@ -22,18 +22,20 @@ pub async fn run_setup() -> anyhow::Result<()> {
         eprintln!("Config already exists at {}", config_path.display());
     }
 
-    // Download default model (base.en) if not present
-    let model_name = "base.en";
+    // Download default model (Parakeet TDT) if not present
+    let model_name = "parakeet-tdt-0.6b-v2";
     if models::is_model_downloaded(model_name) {
         eprintln!("Model '{model_name}' already downloaded.");
     } else {
         let model = models::find_model(model_name).unwrap();
         eprintln!(
-            "Downloading model '{model_name}' ({} MB)...",
-            model.size_mb
+            "Downloading model '{model_name}' (~{} MB, {} files)...",
+            model.size_mb,
+            model.files.len()
         );
 
-        let bar = indicatif::ProgressBar::new(model.size_mb as u64 * 1024 * 1024);
+        let total_bytes: u64 = model.files.iter().map(|f| f.size_mb as u64 * 1024 * 1024).sum();
+        let bar = indicatif::ProgressBar::new(total_bytes);
         bar.set_style(
             indicatif::ProgressStyle::default_bar()
                 .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")

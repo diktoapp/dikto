@@ -15,61 +15,69 @@ pub enum ModelError {
     Http(#[from] reqwest::Error),
 }
 
-/// Model registry entry.
+/// A single file that is part of a model.
+#[derive(Debug, Clone)]
+pub struct ModelFile {
+    pub filename: &'static str,
+    pub url: &'static str,
+    pub size_mb: u32,
+}
+
+/// Model registry entry. A model is a directory containing multiple files.
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
     pub name: &'static str,
-    pub filename: &'static str,
     pub size_mb: u32,
-    pub url: &'static str,
     pub description: &'static str,
+    pub files: &'static [ModelFile],
 }
 
-/// Hardcoded model registry — same models as v1.
-pub const MODELS: &[ModelInfo] = &[
-    ModelInfo {
-        name: "tiny.en",
-        filename: "ggml-tiny.en.bin",
-        size_mb: 75,
-        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
-        description: "Fastest, least accurate (English only)",
-    },
-    ModelInfo {
-        name: "base.en",
-        filename: "ggml-base.en.bin",
-        size_mb: 142,
-        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-        description: "Good balance of speed and accuracy (English only)",
-    },
-    ModelInfo {
-        name: "small.en",
-        filename: "ggml-small.en.bin",
-        size_mb: 466,
-        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-        description: "Higher accuracy, slower (English only)",
-    },
-    ModelInfo {
-        name: "medium.en",
-        filename: "ggml-medium.en.bin",
-        size_mb: 1500,
-        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin",
-        description: "Highest accuracy, slowest (English only)",
-    },
-];
+/// Hardcoded model registry — Parakeet TDT models.
+pub const MODELS: &[ModelInfo] = &[ModelInfo {
+    name: "parakeet-tdt-0.6b-v2",
+    size_mb: 2520,
+    description: "NVIDIA Parakeet TDT 0.6B v2 — high accuracy English ASR (1.69% WER)",
+    files: &[
+        ModelFile {
+            filename: "encoder-model.onnx",
+            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx"),
+            size_mb: 42,
+        },
+        ModelFile {
+            filename: "encoder-model.onnx.data",
+            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx.data"),
+            size_mb: 2440,
+        },
+        ModelFile {
+            filename: "decoder_joint-model.onnx",
+            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/decoder_joint-model.onnx"),
+            size_mb: 36,
+        },
+        ModelFile {
+            filename: "vocab.txt",
+            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/vocab.txt"),
+            size_mb: 1,
+        },
+    ],
+}];
 
 /// Look up model info by name.
 pub fn find_model(name: &str) -> Option<&'static ModelInfo> {
     MODELS.iter().find(|m| m.name == name)
 }
 
-/// Get the local file path for a model.
+/// Get the local directory path for a model.
 pub fn model_path(name: &str) -> Option<PathBuf> {
-    find_model(name).map(|m| models_dir().join(m.filename))
+    find_model(name).map(|_| models_dir().join(name))
 }
 
-/// Check if a model is downloaded.
+/// Check if all files of a model are downloaded.
 pub fn is_model_downloaded(name: &str) -> bool {
-    model_path(name).is_some_and(|p| p.exists())
+    let Some(model) = find_model(name) else {
+        return false;
+    };
+    let dir = models_dir().join(name);
+    model.files.iter().all(|f| dir.join(f.filename).exists())
 }
 
 /// List all models with their download status.
@@ -98,76 +106,88 @@ where
         ModelError::NotFound(name.to_string(), available)
     })?;
 
-    let dir = models_dir();
+    let dir = models_dir().join(name);
     std::fs::create_dir_all(&dir)?;
-    let dest = dir.join(model.filename);
 
-    // Skip if already exists
-    if dest.exists() {
-        info!("Model {} already downloaded at {}", name, dest.display());
-        return Ok(dest);
+    // Calculate total size and already-downloaded bytes
+    let total_bytes: u64 = model.files.iter().map(|f| f.size_mb as u64 * 1024 * 1024).sum();
+    let mut cumulative_downloaded: u64 = 0;
+
+    for file in model.files {
+        let dest = dir.join(file.filename);
+
+        if dest.exists() {
+            // Count existing file size towards progress
+            let existing_size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+            cumulative_downloaded += existing_size;
+            on_progress(cumulative_downloaded, total_bytes);
+            info!("File {} already exists, skipping", file.filename);
+            continue;
+        }
+
+        info!(
+            "Downloading {} ({} MB) from {}",
+            file.filename, file.size_mb, file.url
+        );
+
+        let response = reqwest::get(file.url).await?;
+
+        if !response.status().is_success() {
+            return Err(ModelError::DownloadFailed(format!(
+                "HTTP {} for {}",
+                response.status(),
+                file.filename
+            )));
+        }
+
+        let temp_dest = dir.join(format!("{}.downloading", file.filename));
+
+        use futures::StreamExt;
+        let mut stream = response.bytes_stream();
+        let mut out = tokio::fs::File::create(&temp_dest)
+            .await
+            .map_err(ModelError::Io)?;
+
+        use tokio::io::AsyncWriteExt;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            out.write_all(&chunk).await.map_err(ModelError::Io)?;
+            cumulative_downloaded += chunk.len() as u64;
+            on_progress(cumulative_downloaded, total_bytes);
+        }
+        out.flush().await.map_err(ModelError::Io)?;
+        drop(out);
+
+        tokio::fs::rename(&temp_dest, &dest)
+            .await
+            .map_err(ModelError::Io)?;
+
+        info!("Downloaded {}", file.filename);
     }
 
-    info!("Downloading {} ({} MB) from {}", name, model.size_mb, model.url);
-
-    let response = reqwest::get(model.url).await?;
-
-    if !response.status().is_success() {
-        return Err(ModelError::DownloadFailed(format!(
-            "HTTP {}",
-            response.status()
-        )));
-    }
-
-    let total = response.content_length().unwrap_or(0);
-    let mut downloaded: u64 = 0;
-
-    // Write to temp file first, then rename (atomic)
-    let temp_dest = dir.join(format!("{}.downloading", model.filename));
-
-    use futures::StreamExt;
-    let mut stream = response.bytes_stream();
-    let mut file = tokio::fs::File::create(&temp_dest).await.map_err(|e| {
-        ModelError::Io(e)
-    })?;
-
-    use tokio::io::AsyncWriteExt;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        file.write_all(&chunk).await.map_err(ModelError::Io)?;
-        downloaded += chunk.len() as u64;
-        on_progress(downloaded, total);
-    }
-    file.flush().await.map_err(ModelError::Io)?;
-    drop(file);
-
-    // Rename to final destination
-    tokio::fs::rename(&temp_dest, &dest)
-        .await
-        .map_err(ModelError::Io)?;
-
-    info!("Downloaded {} to {}", name, dest.display());
-    Ok(dest)
+    info!("All files for model '{}' downloaded to {}", name, dir.display());
+    Ok(dir)
 }
 
-/// Delete a downloaded model.
+/// Delete a downloaded model (removes the entire model directory).
 pub fn delete_model(name: &str) -> Result<(), ModelError> {
-    if let Some(path) = model_path(name) {
-        if path.exists() {
-            std::fs::remove_file(&path)?;
-            info!("Deleted model {} at {}", name, path.display());
-        } else {
-            warn!("Model {} not found at {}", name, path.display());
-        }
-        Ok(())
-    } else {
+    let Some(_) = find_model(name) else {
         let available = MODELS
             .iter()
             .map(|m| m.name)
             .collect::<Vec<_>>()
             .join(", ");
-        Err(ModelError::NotFound(name.to_string(), available))
+        return Err(ModelError::NotFound(name.to_string(), available));
+    };
+
+    let dir = models_dir().join(name);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)?;
+        info!("Deleted model {} at {}", name, dir.display());
+    } else {
+        warn!("Model {} not found at {}", name, dir.display());
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -176,20 +196,20 @@ mod tests {
 
     #[test]
     fn test_find_model() {
-        assert!(find_model("base.en").is_some());
+        assert!(find_model("parakeet-tdt-0.6b-v2").is_some());
         assert!(find_model("nonexistent").is_none());
     }
 
     #[test]
     fn test_model_registry() {
-        assert_eq!(MODELS.len(), 4);
-        assert_eq!(MODELS[0].name, "tiny.en");
-        assert_eq!(MODELS[1].name, "base.en");
+        assert_eq!(MODELS.len(), 1);
+        assert_eq!(MODELS[0].name, "parakeet-tdt-0.6b-v2");
+        assert_eq!(MODELS[0].files.len(), 4);
     }
 
     #[test]
-    fn test_model_path() {
-        let path = model_path("base.en").unwrap();
-        assert!(path.to_string_lossy().contains("ggml-base.en.bin"));
+    fn test_model_path_is_directory() {
+        let path = model_path("parakeet-tdt-0.6b-v2").unwrap();
+        assert!(path.to_string_lossy().ends_with("parakeet-tdt-0.6b-v2"));
     }
 }
