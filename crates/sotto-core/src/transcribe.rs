@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use tracing::info;
 
@@ -62,13 +61,6 @@ impl ParakeetEngine {
         Ok(Self { model })
     }
 
-    /// Create a new transcription session.
-    pub fn create_session(&self, _config: TranscribeConfig) -> TranscribeSession {
-        TranscribeSession {
-            audio_buffer: Vec::new(),
-        }
-    }
-
     /// Run batch inference on audio samples.
     /// Returns the transcribed text.
     pub fn transcribe(&mut self, samples: &[f32]) -> Result<String, TranscribeError> {
@@ -78,76 +70,6 @@ impl ParakeetEngine {
             .map_err(|e| TranscribeError::Inference(e.to_string()))?;
 
         Ok(result.text)
-    }
-}
-
-/// A transcription session that accumulates audio for batch inference.
-pub struct TranscribeSession {
-    /// Accumulated audio buffer (16kHz mono f32).
-    audio_buffer: Vec<f32>,
-}
-
-impl TranscribeSession {
-    /// Feed audio samples (16kHz mono f32).
-    /// In batch mode, this just accumulates audio — no inference runs yet.
-    /// Returns an empty vec (no partial results).
-    pub fn feed_samples(&mut self, samples: &[f32]) -> Vec<TranscriptSegment> {
-        self.audio_buffer.extend_from_slice(samples);
-        Vec::new()
-    }
-
-    /// Run batch inference on the accumulated audio buffer.
-    /// Call this when speech ends or recording stops.
-    pub fn flush(
-        &mut self,
-        engine: &Arc<Mutex<ParakeetEngine>>,
-    ) -> Result<Vec<TranscriptSegment>, TranscribeError> {
-        if self.audio_buffer.is_empty() {
-            eprintln!("[sotto] flush: buffer empty, skipping");
-            return Ok(Vec::new());
-        }
-
-        eprintln!(
-            "[sotto] flush: {:.1}s of audio ({} samples)",
-            self.audio_buffer.len() as f32 / 16000.0,
-            self.audio_buffer.len()
-        );
-
-        // Truncate to ~4 minutes (TDT limit is ~5 min, leave margin)
-        const MAX_SAMPLES: usize = 4 * 60 * 16000; // 4 min at 16kHz
-        if self.audio_buffer.len() > MAX_SAMPLES {
-            info!(
-                "Truncating audio from {:.1}s to 240s (TDT limit)",
-                self.audio_buffer.len() as f32 / 16000.0
-            );
-            self.audio_buffer.truncate(MAX_SAMPLES);
-        }
-
-        eprintln!("[sotto] flush: acquiring engine lock...");
-        let mut engine = engine
-            .lock()
-            .map_err(|e| TranscribeError::Inference(format!("Lock poisoned: {e}")))?;
-        eprintln!("[sotto] flush: lock acquired, running inference...");
-
-        let start = std::time::Instant::now();
-        let text = engine.transcribe(&self.audio_buffer)?;
-        eprintln!("[sotto] flush: inference done in {:.1}s", start.elapsed().as_secs_f32());
-        self.audio_buffer.clear();
-
-        let text = text.trim().to_string();
-        if text.is_empty() || is_hallucination(&text) {
-            return Ok(Vec::new());
-        }
-
-        Ok(vec![TranscriptSegment {
-            text,
-            is_final: true,
-        }])
-    }
-
-    /// Get accumulated audio buffer length in seconds.
-    pub fn buffer_duration_secs(&self) -> f32 {
-        self.audio_buffer.len() as f32 / 16000.0
     }
 }
 
@@ -196,13 +118,6 @@ impl WhisperEngine {
         Ok(Self { ctx })
     }
 
-    /// Create a new Whisper transcription session.
-    pub fn create_session(&self, _config: TranscribeConfig) -> WhisperSession {
-        WhisperSession {
-            audio_buffer: Vec::new(),
-        }
-    }
-
     /// Run batch inference on audio samples.
     /// `language` should be an ISO-639-1 code (e.g. "en", "es") or "auto".
     pub fn transcribe(&self, samples: &[f32], language: &str) -> Result<String, TranscribeError> {
@@ -247,83 +162,6 @@ impl WhisperEngine {
     }
 }
 
-/// A Whisper transcription session that accumulates audio for batch inference.
-pub struct WhisperSession {
-    audio_buffer: Vec<f32>,
-}
-
-impl WhisperSession {
-    /// Feed audio samples (16kHz mono f32).
-    pub fn feed_samples(&mut self, samples: &[f32]) -> Vec<TranscriptSegment> {
-        self.audio_buffer.extend_from_slice(samples);
-        Vec::new()
-    }
-
-    /// Run batch inference on the accumulated audio buffer.
-    pub fn flush(
-        &mut self,
-        engine: &Arc<Mutex<WhisperEngine>>,
-        language: &str,
-    ) -> Result<Vec<TranscriptSegment>, TranscribeError> {
-        if self.audio_buffer.is_empty() {
-            eprintln!("[sotto] whisper flush: buffer empty, skipping");
-            return Ok(Vec::new());
-        }
-
-        eprintln!(
-            "[sotto] whisper flush: {:.1}s of audio ({} samples)",
-            self.audio_buffer.len() as f32 / 16000.0,
-            self.audio_buffer.len()
-        );
-
-        // Whisper can handle up to ~30 minutes, but cap at 4 min to match Parakeet behavior
-        const MAX_SAMPLES: usize = 4 * 60 * 16000;
-        if self.audio_buffer.len() > MAX_SAMPLES {
-            info!(
-                "Truncating audio from {:.1}s to 240s",
-                self.audio_buffer.len() as f32 / 16000.0
-            );
-            self.audio_buffer.truncate(MAX_SAMPLES);
-        }
-
-        eprintln!("[sotto] whisper flush: acquiring engine lock...");
-        let engine = engine
-            .lock()
-            .map_err(|e| TranscribeError::Inference(format!("Lock poisoned: {e}")))?;
-        eprintln!("[sotto] whisper flush: lock acquired, running inference...");
-
-        let start = std::time::Instant::now();
-        let text = engine.transcribe(&self.audio_buffer, language)?;
-        eprintln!(
-            "[sotto] whisper flush: inference done in {:.1}s",
-            start.elapsed().as_secs_f32()
-        );
-        self.audio_buffer.clear();
-
-        let text = text.trim().to_string();
-        if text.is_empty() || is_hallucination(&text) {
-            return Ok(Vec::new());
-        }
-
-        Ok(vec![TranscriptSegment {
-            text,
-            is_final: true,
-        }])
-    }
-
-    /// Get accumulated audio buffer length in seconds.
-    pub fn buffer_duration_secs(&self) -> f32 {
-        self.audio_buffer.len() as f32 / 16000.0
-    }
-}
-
-/// Returns true if the text looks like a hallucination token
-/// (e.g. `[BLANK_AUDIO]`, `(music)`, `[MUSIC]`, `(silence)`).
-fn is_hallucination(text: &str) -> bool {
-    let t = text.trim();
-    (t.starts_with('[') && t.ends_with(']')) || (t.starts_with('(') && t.ends_with(')'))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,40 +170,5 @@ mod tests {
     fn test_transcribe_config_defaults() {
         let config = TranscribeConfig::default();
         assert_eq!(config.language, "en");
-    }
-
-    #[test]
-    fn test_is_hallucination() {
-        assert!(is_hallucination("[BLANK_AUDIO]"));
-        assert!(is_hallucination("[MUSIC]"));
-        assert!(is_hallucination("[INAUDIBLE]"));
-        assert!(is_hallucination("[no speech]"));
-        assert!(is_hallucination("(music)"));
-        assert!(is_hallucination("(laughter)"));
-        assert!(is_hallucination("(silence)"));
-        assert!(is_hallucination("  [BLANK_AUDIO]  ")); // with whitespace
-        assert!(!is_hallucination("Hello world"));
-        assert!(!is_hallucination("This is [a] test"));
-        assert!(!is_hallucination(""));
-    }
-
-    #[test]
-    fn test_session_feed_returns_empty() {
-        let mut session = TranscribeSession {
-            audio_buffer: Vec::new(),
-        };
-        let segments = session.feed_samples(&[0.0; 1600]);
-        assert!(segments.is_empty());
-        assert_eq!(session.buffer_duration_secs(), 0.1);
-    }
-
-    #[test]
-    fn test_session_buffer_duration() {
-        let mut session = TranscribeSession {
-            audio_buffer: Vec::new(),
-        };
-        assert_eq!(session.buffer_duration_secs(), 0.0);
-        session.feed_samples(&[0.0; 16000]);
-        assert!((session.buffer_duration_secs() - 1.0).abs() < 0.01);
     }
 }

@@ -9,7 +9,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "sotto_core"
 
 [dependencies]
-uniffi = { version = "0.29", features = ["cli"] }
+uniffi = "0.29"
 parakeet-rs = "0.2"
 whisper-rs = "0.13"
 ort = "=2.0.0-rc.10"

@@ -245,6 +245,18 @@ where
             .await
             .map_err(ModelError::Io)?;
 
+        // Verify downloaded file size (within 10% of expected)
+        let actual_size = tokio::fs::metadata(&dest).await.map_err(ModelError::Io)?.len();
+        let expected_size = file.size_mb as u64 * 1024 * 1024;
+        let tolerance = expected_size / 10; // 10%
+        if actual_size < expected_size.saturating_sub(tolerance) {
+            let _ = tokio::fs::remove_file(&dest).await;
+            return Err(ModelError::DownloadFailed(format!(
+                "Size mismatch for {}: expected ~{} MB, got {} bytes",
+                file.filename, file.size_mb, actual_size
+            )));
+        }
+
         info!("Downloaded {}", file.filename);
     }
 

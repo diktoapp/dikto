@@ -8,8 +8,8 @@ extension Notification.Name {
 }
 
 /// Callback that bridges UniFFI transcription events to AppState.
-final class AppCallback: TranscriptionCallback {
-    nonisolated(unsafe) private weak var appState: AppState?
+final class AppCallback: TranscriptionCallback, @unchecked Sendable {
+    private weak var appState: AppState?
 
     init(appState: AppState) {
         self.appState = appState
@@ -38,13 +38,8 @@ final class AppCallback: TranscriptionCallback {
     }
 
     func onStateChange(state: RecordingState) {
-        NSLog("[Sotto] onStateChange called: \(state)")
         DispatchQueue.main.async { [weak self] in
-            NSLog("[Sotto] onStateChange main queue: self=\(self != nil), appState=\(self?.appState != nil)")
-            guard let appState = self?.appState else {
-                NSLog("[Sotto] WARNING: appState is nil, cannot handle state change!")
-                return
-            }
+            guard let appState = self?.appState else { return }
             switch state {
             case .listening:
                 appState.isRecording = true
@@ -54,12 +49,10 @@ final class AppCallback: TranscriptionCallback {
                 appState.isProcessing = true
                 appState.overlayController.show(text: appState.partialText, isProcessing: true)
             case let .done(text):
-                NSLog("[Sotto] Done received, hiding overlay. text='\(text.prefix(60))'")
                 appState.isRecording = false
                 appState.isProcessing = false
                 appState.modelInMemory = true
                 appState.overlayController.hide()
-                NSLog("[Sotto] Overlay hidden")
                 appState.handleTranscriptionDone(text)
             case let .error(message):
                 appState.isRecording = false
@@ -72,8 +65,8 @@ final class AppCallback: TranscriptionCallback {
 }
 
 /// Callback that bridges UniFFI download progress events to AppState.
-final class DownloadCallback: DownloadProgressCallback {
-    nonisolated(unsafe) private weak var appState: AppState?
+final class DownloadCallback: DownloadProgressCallback, @unchecked Sendable {
+    private weak var appState: AppState?
     private let modelName: String
 
     init(appState: AppState, modelName: String) {
@@ -124,6 +117,7 @@ final class AppState: ObservableObject {
     private var sessionHandle: SessionHandle?
     private var activeCallback: AppCallback?
     private var hotKeyRef: EventHotKeyRef?
+    private var startingRecording = false
 
     init() {
         loadEngine()
@@ -174,6 +168,7 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         if let ref = hotKeyRef {
             UnregisterEventHotKey(ref)
         }
@@ -221,6 +216,7 @@ final class AppState: ObservableObject {
     }
 
     func startRecording() {
+        guard !startingRecording else { return }
         guard let engine else {
             lastError = "Engine not initialized"
             return
@@ -229,6 +225,7 @@ final class AppState: ObservableObject {
             lastError = "No model downloaded. Open Settings to download one."
             return
         }
+        startingRecording = true
 
         let cfg = engine.getConfig()
         let listenConfig = ListenConfig(
@@ -251,6 +248,7 @@ final class AppState: ObservableObject {
             isRecording = false
             lastError = error.localizedDescription
         }
+        startingRecording = false
     }
 
     func stopRecording() {
@@ -279,7 +277,7 @@ final class AppState: ObservableObject {
         if wantCopy || wantPaste {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(cleaned, forType: .string)
-            NSLog("[Sotto] Copied to clipboard: \(cleaned.prefix(50))...")
+            NSLog("[Sotto] Copied to clipboard")
         }
 
         // Auto-paste (Cmd+V) — just attempt it; needs Accessibility permission

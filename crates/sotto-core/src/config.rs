@@ -62,17 +62,26 @@ impl Default for SottoConfig {
     }
 }
 
+impl SottoConfig {
+    /// Clamp all numeric fields to safe ranges.
+    pub fn validate(&mut self) {
+        self.max_duration = self.max_duration.clamp(1, 120);
+        self.silence_duration_ms = self.silence_duration_ms.clamp(250, 10000);
+        self.speech_threshold = self.speech_threshold.clamp(0.01, 0.99);
+    }
+}
+
 /// Returns the config directory path: ~/.config/sotto/
 pub fn config_dir() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .expect("Cannot determine home directory")
         .join(".config/sotto")
 }
 
 /// Returns the data directory path: ~/.local/share/sotto/
 pub fn data_dir() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .expect("Cannot determine home directory")
         .join(".local/share/sotto")
 }
 
@@ -120,18 +129,19 @@ pub fn load_config() -> SottoConfig {
         }
     }
 
+    config.validate();
     config
 }
 
-/// Save config to disk.
+/// Save config to disk. Values are validated (clamped) before saving.
 pub fn save_config(config: &SottoConfig) -> Result<(), std::io::Error> {
+    let mut config = config.clone();
+    config.validate();
     let path = config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json = serde_json::to_string_pretty(config).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, e)
-    })?;
+    let json = serde_json::to_string_pretty(&config).map_err(std::io::Error::other)?;
     std::fs::write(&path, json)
 }
 

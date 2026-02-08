@@ -4,8 +4,18 @@ import SwiftUI
 /// A floating overlay that shows recording status and partial transcription.
 final class RecordingOverlayController {
     private var panel: NSPanel?
+    private var hostingView: NSHostingView<RecordingOverlayView>?
 
     func show(text: String, isProcessing: Bool) {
+        let view = RecordingOverlayView(text: text, isProcessing: isProcessing)
+
+        if let hostingView {
+            hostingView.rootView = view
+        } else {
+            let hosting = NSHostingView(rootView: view)
+            self.hostingView = hosting
+        }
+
         if panel == nil {
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 420, height: 60),
@@ -31,14 +41,14 @@ final class RecordingOverlayController {
             self.panel = panel
         }
 
-        let view = RecordingOverlayView(text: text, isProcessing: isProcessing)
-        panel?.contentView = NSHostingView(rootView: view)
+        panel?.contentView = hostingView
         panel?.orderFront(nil)
     }
 
     func hide() {
         panel?.orderOut(nil)
         panel = nil
+        hostingView = nil
     }
 }
 

@@ -8,9 +8,9 @@ HEADER_FILE  = $(BINDINGS_DIR)/sotto_coreFFI.h
 MODULE_MAP   = $(BINDINGS_DIR)/sotto_coreFFI.modulemap
 UDLLIB       = target/release/libsotto_core.dylib
 
-.PHONY: all build-rust generate-bindings build-app clean
+.PHONY: all build-rust generate-bindings build-app clean test clippy
 
-all: build-rust generate-bindings
+all: build-rust generate-bindings build-app
 
 ## Build the Rust static library (release, with Metal)
 build-rust:
@@ -29,7 +29,16 @@ generate-bindings: build-rust
 build-app: generate-bindings
 	./build-app.sh
 
+## Run all tests
+test:
+	$(CARGO) test --workspace
+
+## Run clippy lints
+clippy:
+	$(CARGO) clippy --workspace -- -D warnings
+
 ## Clean all build artifacts
 clean:
 	$(CARGO) clean
 	rm -rf $(BINDINGS_DIR)
+	rm -rf build/

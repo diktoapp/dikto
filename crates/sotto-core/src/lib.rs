@@ -175,6 +175,7 @@ impl SottoEngine {
     /// Create a new SottoEngine. Does NOT load any model into RAM.
     /// Auto-migrates old v1 Whisper model configs to Parakeet.
     #[uniffi::constructor]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut config = config::load_config();
 
@@ -202,7 +203,8 @@ impl SottoEngine {
     /// Explicitly load the configured model into RAM.
     /// Optional — start_listening() will lazy-load if needed.
     pub fn load_model(&self) -> Result<(), SottoError> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock()
+            .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
         let model_name = inner.config.model_name.clone();
         let model_info =
             models::find_model(&model_name).ok_or(SottoError::NoModel)?;
@@ -213,7 +215,8 @@ impl SottoEngine {
         }
 
         let asr = AsrEngine::load(model_info.backend, &path)?;
-        *inner.engine.lock().unwrap() = Some(LoadedEngine {
+        *inner.engine.lock()
+            .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))? = Some(LoadedEngine {
             model_name: model_name.clone(),
             engine: asr,
         });
@@ -223,8 +226,10 @@ impl SottoEngine {
 
     /// Unload the current model from RAM, freeing memory.
     pub fn unload_model(&self) {
-        let inner = self.inner.lock().unwrap();
-        let was_loaded = inner.engine.lock().unwrap().take().is_some();
+        let Ok(inner) = self.inner.lock() else { return };
+        let was_loaded = inner.engine.lock().ok()
+            .and_then(|mut g| g.take())
+            .is_some();
         if was_loaded {
             info!("Model unloaded from RAM");
         }
@@ -233,7 +238,8 @@ impl SottoEngine {
     /// Switch to a different model. Unloads the current model from RAM.
     /// The new model will be loaded lazily on next recording.
     pub fn switch_model(&self, model_name: String) -> Result<(), SottoError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock()
+            .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
 
         if inner.recording.load(Ordering::Relaxed) {
             return Err(SottoError::AlreadyRecording);
@@ -246,7 +252,9 @@ impl SottoEngine {
         }
 
         // Unload old model from RAM
-        *inner.engine.lock().unwrap() = None;
+        if let Ok(mut guard) = inner.engine.lock() {
+            *guard = None;
+        }
 
         // Save new model choice
         inner.config.model_name = model_name.clone();
@@ -263,7 +271,8 @@ impl SottoEngine {
         listen_config: ListenConfig,
         callback: Arc<dyn TranscriptionCallback>,
     ) -> Result<Arc<SessionHandle>, SottoError> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock()
+            .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
 
         if inner.recording.load(Ordering::Relaxed) {
             return Err(SottoError::AlreadyRecording);
@@ -279,7 +288,7 @@ impl SottoEngine {
 
         let engine_holder = inner.engine.clone();
         let backend = model_info.backend;
-        let model_path = models::model_path(&model_name).unwrap();
+        let model_path = models::model_path(&model_name).ok_or(SottoError::NoModel)?;
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let handle = Arc::new(SessionHandle {
@@ -297,71 +306,83 @@ impl SottoEngine {
         drop(inner); // Release outer lock before spawning
 
         std::thread::spawn(move || {
-            // Lazy-load model if needed
-            let needs_load = {
-                let guard = engine_holder.lock().unwrap();
-                match &*guard {
-                    Some(loaded) if loaded.model_name == model_name => false,
-                    _ => true,
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Lazy-load model if needed
+                let needs_load = {
+                    let guard = engine_holder.lock()
+                        .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
+                    !matches!(&*guard, Some(loaded) if loaded.model_name == model_name)
+                };
+
+                if needs_load {
+                    callback.on_state_change(RecordingState::Processing);
+                    callback.on_partial("Loading model...".to_string());
+                    debug!("Lazy-loading model '{}'...", model_name);
+
+                    match AsrEngine::load(backend, &model_path) {
+                        Ok(asr) => {
+                            let mut guard = engine_holder.lock()
+                                .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
+                            *guard = Some(LoadedEngine {
+                                model_name: model_name.clone(),
+                                engine: asr,
+                            });
+                            debug!("Model '{}' loaded into RAM", model_name);
+                        }
+                        Err(e) => {
+                            recording.store(false, Ordering::Relaxed);
+                            callback.on_state_change(RecordingState::Error {
+                                message: format!("Failed to load model: {e}"),
+                            });
+                            return Ok(());
+                        }
+                    }
                 }
-            };
 
-            if needs_load {
-                callback.on_state_change(RecordingState::Processing);
-                callback.on_partial("Loading model...".to_string());
-                eprintln!("[sotto] Lazy-loading model '{}'...", model_name);
+                // Create transcription session
+                let transcribe_config = TranscribeConfig { language };
+                let session = {
+                    let guard = engine_holder.lock()
+                        .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
+                    let loaded = guard.as_ref().ok_or(SottoError::NoModel)?;
+                    loaded.engine.create_session(transcribe_config)
+                };
 
-                match AsrEngine::load(backend, &model_path) {
-                    Ok(asr) => {
-                        *engine_holder.lock().unwrap() = Some(LoadedEngine {
-                            model_name: model_name.clone(),
-                            engine: asr,
+                let result = run_pipeline(
+                    session,
+                    &engine_holder,
+                    stop_flag,
+                    callback.clone(),
+                    max_duration,
+                    silence_duration_ms,
+                    speech_threshold,
+                );
+
+                recording.store(false, Ordering::Relaxed);
+
+                match &result {
+                    Ok(text) => {
+                        debug!("pipeline done, text_len={}", text.len());
+                        callback.on_state_change(RecordingState::Done {
+                            text: text.clone(),
                         });
-                        eprintln!("[sotto] Model '{}' loaded into RAM", model_name);
                     }
                     Err(e) => {
-                        recording.store(false, Ordering::Relaxed);
+                        warn!("pipeline error: {e}");
                         callback.on_state_change(RecordingState::Error {
-                            message: format!("Failed to load model: {e}"),
+                            message: e.to_string(),
                         });
-                        return;
                     }
                 }
-            }
 
-            // Create transcription session
-            let transcribe_config = TranscribeConfig { language };
-            let session = {
-                let guard = engine_holder.lock().unwrap();
-                guard.as_ref().unwrap().engine.create_session(transcribe_config)
-            };
+                Ok::<(), SottoError>(())
+            }));
 
-            let result = run_pipeline(
-                session,
-                &engine_holder,
-                stop_flag,
-                callback.clone(),
-                max_duration,
-                silence_duration_ms,
-                speech_threshold,
-            );
-
-            recording.store(false, Ordering::Relaxed);
-
-            match &result {
-                Ok(text) => {
-                    eprintln!("[sotto] pipeline done, text='{}' (len={})", text.chars().take(80).collect::<String>(), text.len());
-                    callback.on_state_change(RecordingState::Done {
-                        text: text.clone(),
-                    });
-                    eprintln!("[sotto] Done callback fired");
-                }
-                Err(e) => {
-                    eprintln!("[sotto] pipeline error: {e}");
-                    callback.on_state_change(RecordingState::Error {
-                        message: e.to_string(),
-                    });
-                }
+            if let Err(_panic) = result {
+                recording.store(false, Ordering::Relaxed);
+                callback.on_state_change(RecordingState::Error {
+                    message: "Internal error (thread panic)".to_string(),
+                });
             }
         });
 
@@ -370,12 +391,15 @@ impl SottoEngine {
 
     /// Get a copy of the current config.
     pub fn get_config(&self) -> SottoConfig {
-        self.inner.lock().unwrap().config.clone()
+        self.inner.lock().ok()
+            .map(|g| g.config.clone())
+            .unwrap_or_default()
     }
 
     /// Update config and save.
     pub fn update_config(&self, config: SottoConfig) -> Result<(), SottoError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock()
+            .map_err(|e| SottoError::Config(format!("Lock poisoned: {e}")))?;
         config::save_config(&config).map_err(|e| SottoError::Config(e.to_string()))?;
         inner.config = config;
         Ok(())
@@ -411,10 +435,16 @@ impl SottoEngine {
 
         let name = model_name.clone();
         std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .unwrap();
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    callback.on_error(format!("Failed to create runtime: {e}"));
+                    return;
+                }
+            };
 
             rt.block_on(async {
                 let cb = callback.clone();
@@ -434,7 +464,12 @@ impl SottoEngine {
 
     /// Get available languages for the currently configured model.
     pub fn available_languages(&self) -> Vec<LanguageInfo> {
-        let inner = self.inner.lock().unwrap();
+        let Ok(inner) = self.inner.lock() else {
+            return vec![LanguageInfo {
+                code: "en".to_string(),
+                name: "English".to_string(),
+            }];
+        };
         let model_name = &inner.config.model_name;
 
         match models::find_model(model_name) {
@@ -456,20 +491,22 @@ impl SottoEngine {
     /// Check if the configured model's files are downloaded (available on disk).
     /// This does NOT mean the model is loaded into RAM.
     pub fn is_model_available(&self) -> bool {
-        let inner = self.inner.lock().unwrap();
+        let Ok(inner) = self.inner.lock() else { return false };
         models::is_model_downloaded(&inner.config.model_name)
     }
 
     /// Check if a model is currently loaded in RAM.
     pub fn is_model_loaded(&self) -> bool {
-        let inner = self.inner.lock().unwrap();
-        let engine_guard = inner.engine.lock().unwrap();
+        let Ok(inner) = self.inner.lock() else { return false };
+        let Ok(engine_guard) = inner.engine.lock() else { return false };
         engine_guard.is_some()
     }
 
     /// Check if currently recording.
     pub fn is_recording(&self) -> bool {
-        self.inner.lock().unwrap().recording.load(Ordering::Relaxed)
+        self.inner.lock().ok()
+            .map(|g| g.recording.load(Ordering::Relaxed))
+            .unwrap_or(false)
     }
 
     /// Get the models directory path (for debugging).

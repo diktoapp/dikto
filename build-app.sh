@@ -71,9 +71,12 @@ swiftc \
     -o "$MACOS_DIR/SottoApp" \
     "${SWIFT_FILES[@]}"
 
-# Remove extended attributes and ad-hoc code sign
+# Remove extended attributes and ad-hoc code sign with hardened runtime
 xattr -cr "$APP_DIR"
-codesign --force --sign - "$APP_DIR"
+codesign --force --sign - \
+    --options runtime \
+    --entitlements "$ROOT/SottoApp/SottoApp.entitlements" \
+    "$APP_DIR"
 
 echo "Created: $APP_DIR"
 echo "Run with: open $APP_DIR"

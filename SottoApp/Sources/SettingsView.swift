@@ -50,6 +50,9 @@ struct GeneralSettingsView: View {
                             if autoPaste { autoCopy = true }
                             saveSettings()
                         }
+                    Text("Requires Accessibility permission in System Settings")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
 
                 if appState.availableLanguages.count > 1 {

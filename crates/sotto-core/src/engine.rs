@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use crate::models::ModelBackend;
 use crate::transcribe::{
@@ -10,7 +10,7 @@ use crate::transcribe::{
 
 /// Unified ASR engine wrapping both Parakeet and Whisper backends.
 pub enum AsrEngine {
-    Parakeet(ParakeetEngine),
+    Parakeet(Box<ParakeetEngine>),
     Whisper(WhisperEngine),
 }
 
@@ -21,7 +21,7 @@ impl AsrEngine {
     /// Load a model based on backend type.
     pub fn load(backend: ModelBackend, model_dir: &Path) -> Result<Self, TranscribeError> {
         match backend {
-            ModelBackend::Parakeet => Ok(AsrEngine::Parakeet(ParakeetEngine::load(model_dir)?)),
+            ModelBackend::Parakeet => Ok(AsrEngine::Parakeet(Box::new(ParakeetEngine::load(model_dir)?))),
             ModelBackend::Whisper => Ok(AsrEngine::Whisper(WhisperEngine::load(model_dir)?)),
         }
     }
@@ -60,12 +60,12 @@ impl AsrSession {
         engine: &Arc<Mutex<Option<LoadedEngine>>>,
     ) -> Result<Vec<TranscriptSegment>, TranscribeError> {
         if self.audio_buffer.is_empty() {
-            eprintln!("[sotto] flush: buffer empty, skipping");
+            warn!("flush: buffer empty, skipping");
             return Ok(Vec::new());
         }
 
-        eprintln!(
-            "[sotto] flush: {:.1}s of audio ({} samples)",
+        debug!(
+            "flush: {:.1}s of audio ({} samples)",
             self.audio_buffer.len() as f32 / 16000.0,
             self.audio_buffer.len()
         );
@@ -80,7 +80,7 @@ impl AsrSession {
             self.audio_buffer.truncate(MAX_SAMPLES);
         }
 
-        eprintln!("[sotto] flush: acquiring engine lock...");
+        debug!("flush: acquiring engine lock...");
         let mut guard = engine
             .lock()
             .map_err(|e| TranscribeError::Inference(format!("Lock poisoned: {e}")))?;
@@ -89,15 +89,15 @@ impl AsrSession {
             .as_mut()
             .ok_or(TranscribeError::NotLoaded)?;
 
-        eprintln!("[sotto] flush: lock acquired, running inference...");
+        debug!("flush: lock acquired, running inference...");
 
         let start = std::time::Instant::now();
         let text = match &mut loaded.engine {
             AsrEngine::Parakeet(e) => e.transcribe(&self.audio_buffer)?,
             AsrEngine::Whisper(e) => e.transcribe(&self.audio_buffer, &self.language)?,
         };
-        eprintln!(
-            "[sotto] flush: inference done in {:.1}s",
+        debug!(
+            "flush: inference done in {:.1}s",
             start.elapsed().as_secs_f32()
         );
         self.audio_buffer.clear();
@@ -119,8 +119,46 @@ impl AsrSession {
     }
 }
 
-/// Returns true if the text looks like a hallucination token.
+/// Returns true if the text looks like a known ASR hallucination token.
 fn is_hallucination(text: &str) -> bool {
-    let t = text.trim();
-    (t.starts_with('[') && t.ends_with(']')) || (t.starts_with('(') && t.ends_with(')'))
+    let t = text.trim().to_lowercase();
+    let hallucinations = [
+        "[blank_audio]",
+        "[music]",
+        "[inaudible]",
+        "[silence]",
+        "[no speech]",
+        "[applause]",
+        "[laughter]",
+        "(music)",
+        "(silence)",
+        "(laughter)",
+        "(applause)",
+        "(no speech)",
+        "(blank audio)",
+    ];
+    hallucinations.contains(&t.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_hallucination() {
+        assert!(is_hallucination("[BLANK_AUDIO]"));
+        assert!(is_hallucination("[MUSIC]"));
+        assert!(is_hallucination("[INAUDIBLE]"));
+        assert!(is_hallucination("[no speech]"));
+        assert!(is_hallucination("(music)"));
+        assert!(is_hallucination("(laughter)"));
+        assert!(is_hallucination("(silence)"));
+        assert!(is_hallucination("  [BLANK_AUDIO]  ")); // with whitespace
+        assert!(!is_hallucination("Hello world"));
+        assert!(!is_hallucination("This is [a] test"));
+        assert!(!is_hallucination(""));
+        // These should NOT be hallucinations (valid speech with brackets/parens)
+        assert!(!is_hallucination("(pause) let me think"));
+        assert!(!is_hallucination("[unclear] something here"));
+    }
 }

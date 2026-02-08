@@ -1,23 +1,11 @@
 import SwiftUI
 
-/// Dismiss the MenuBarExtra popover window by sending Escape to it.
+/// Dismiss the MenuBarExtra popover window.
 private func dismissMenuBarExtra() {
-    // Find the MenuBarExtra panel and close it
-    for window in NSApp.windows {
-        // MenuBarExtra .window style creates an NSPanel subclass
-        if window is NSPanel, window.isVisible, window.className.contains("StatusBarWindow")
-            || window.className.contains("MenuBarExtraWindow")
-            || (window.level.rawValue > NSWindow.Level.normal.rawValue && window.styleMask.contains(.nonactivatingPanel))
-        {
-            window.close()
-            return
-        }
+    for window in NSApp.windows where window is NSPanel && window.isVisible && window.level.rawValue > NSWindow.Level.normal.rawValue {
+        window.close()
+        return
     }
-    // Fallback: post escape key to dismiss any popover
-    let esc = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true)
-    esc?.post(tap: .cghidEventTap)
-    let escUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false)
-    escUp?.post(tap: .cghidEventTap)
 }
 
 struct MenuBarView: View {
@@ -35,7 +23,9 @@ struct MenuBarView: View {
 
             if !appState.finalText.isEmpty {
                 Divider()
-                let truncated = String(appState.finalText.prefix(80))
+                let truncated = appState.finalText.count > 80
+                    ? String(appState.finalText.prefix(80)) + "..."
+                    : appState.finalText
                 Text(truncated)
             }
 
