@@ -1,29 +1,46 @@
 import SwiftUI
 
-struct SettingsOpenerView: View {
-    @Environment(\.openSettings) private var openSettings
+/// Manages a standalone Settings window that opens on the current Space
+/// without switching desktops. Uses NSWindow directly instead of SwiftUI's
+/// Settings scene to avoid the activation policy change that causes Space switching.
+@MainActor
+final class SettingsWindowController {
+    static let shared = SettingsWindowController()
+    private var window: NSWindow?
+    private var hostingView: NSHostingView<AnyView>?
 
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .onReceive(NotificationCenter.default.publisher(for: .openSettingsRequest)) { _ in
-                Task { @MainActor in
-                    NSApp.setActivationPolicy(.regular)
-                    try? await Task.sleep(for: .milliseconds(100))
-                    NSApp.activate(ignoringOtherApps: true)
-                    openSettings()
-                    try? await Task.sleep(for: .milliseconds(200))
-                    for window in NSApp.windows where window.isVisible && window.canBecomeKey {
-                        if window.identifier?.rawValue.contains("settings") == true
-                            || window.title.localizedCaseInsensitiveContains("settings") {
-                            window.makeKeyAndOrderFront(nil)
-                            window.orderFrontRegardless()
-                            break
-                        }
-                    }
-                    NSApp.setActivationPolicy(.accessory)
-                }
-            }
+    func show(appState: AppState) {
+        if let existing = window, existing.isVisible {
+            existing.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+            existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView()
+            .environmentObject(appState)
+        let hosting = NSHostingView(rootView: AnyView(settingsView))
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 400)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.title = "Sotto Settings"
+        window.isReleasedWhenClosed = false
+        // This is the key: moveToActiveSpace prevents Space switching
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+
+        self.window = window
+        self.hostingView = hosting
     }
 }
 
@@ -32,12 +49,6 @@ struct SottoApp: App {
     @StateObject private var appState = AppState()
 
     var body: some Scene {
-        Window("", id: "hidden") {
-            SettingsOpenerView()
-        }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 0, height: 0)
-
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(appState)
@@ -46,10 +57,5 @@ struct SottoApp: App {
                 .symbolRenderingMode(.hierarchical)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
-                .environmentObject(appState)
-        }
     }
 }

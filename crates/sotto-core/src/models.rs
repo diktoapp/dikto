@@ -15,6 +15,13 @@ pub enum ModelError {
     Http(#[from] reqwest::Error),
 }
 
+/// ASR backend type for a model.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ModelBackend {
+    Parakeet,
+    Whisper,
+}
+
 /// A single file that is part of a model.
 #[derive(Debug, Clone)]
 pub struct ModelFile {
@@ -30,36 +37,112 @@ pub struct ModelInfo {
     pub size_mb: u32,
     pub description: &'static str,
     pub files: &'static [ModelFile],
+    pub backend: ModelBackend,
 }
 
-/// Hardcoded model registry — Parakeet TDT models.
-pub const MODELS: &[ModelInfo] = &[ModelInfo {
-    name: "parakeet-tdt-0.6b-v2",
-    size_mb: 2520,
-    description: "NVIDIA Parakeet TDT 0.6B v2 — high accuracy English ASR (1.69% WER)",
-    files: &[
-        ModelFile {
-            filename: "encoder-model.onnx",
-            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx"),
-            size_mb: 42,
-        },
-        ModelFile {
-            filename: "encoder-model.onnx.data",
-            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx.data"),
-            size_mb: 2440,
-        },
-        ModelFile {
-            filename: "decoder_joint-model.onnx",
-            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/decoder_joint-model.onnx"),
-            size_mb: 36,
-        },
-        ModelFile {
-            filename: "vocab.txt",
-            url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/vocab.txt"),
-            size_mb: 1,
-        },
-    ],
-}];
+/// Hardcoded model registry.
+pub const MODELS: &[ModelInfo] = &[
+    ModelInfo {
+        name: "parakeet-tdt-0.6b-v2",
+        size_mb: 2520,
+        description: "NVIDIA Parakeet TDT 0.6B v2 — high accuracy English ASR (1.69% WER)",
+        backend: ModelBackend::Parakeet,
+        files: &[
+            ModelFile {
+                filename: "encoder-model.onnx",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx"),
+                size_mb: 42,
+            },
+            ModelFile {
+                filename: "encoder-model.onnx.data",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx.data"),
+                size_mb: 2440,
+            },
+            ModelFile {
+                filename: "decoder_joint-model.onnx",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/decoder_joint-model.onnx"),
+                size_mb: 36,
+            },
+            ModelFile {
+                filename: "vocab.txt",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/vocab.txt"),
+                size_mb: 1,
+            },
+        ],
+    },
+    ModelInfo {
+        name: "parakeet-tdt-0.6b-v3",
+        size_mb: 2560,
+        description: "NVIDIA Parakeet TDT 0.6B v3 — 25 EU languages, 6.34% avg WER",
+        backend: ModelBackend::Parakeet,
+        files: &[
+            ModelFile {
+                filename: "encoder-model.onnx",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/encoder-model.onnx"),
+                size_mb: 42,
+            },
+            ModelFile {
+                filename: "encoder-model.onnx.data",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/encoder-model.onnx.data"),
+                size_mb: 2440,
+            },
+            ModelFile {
+                filename: "decoder_joint-model.onnx",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/decoder_joint-model.onnx"),
+                size_mb: 73,
+            },
+            ModelFile {
+                filename: "vocab.txt",
+                url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/vocab.txt"),
+                size_mb: 1,
+            },
+        ],
+    },
+    ModelInfo {
+        name: "whisper-tiny",
+        size_mb: 75,
+        description: "Whisper Tiny — fast, 99 languages, ~75 MB",
+        backend: ModelBackend::Whisper,
+        files: &[ModelFile {
+            filename: "ggml-tiny.bin",
+            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+            size_mb: 75,
+        }],
+    },
+    ModelInfo {
+        name: "whisper-small",
+        size_mb: 460,
+        description: "Whisper Small — balanced accuracy & speed, 99 languages, ~460 MB",
+        backend: ModelBackend::Whisper,
+        files: &[ModelFile {
+            filename: "ggml-small.bin",
+            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+            size_mb: 460,
+        }],
+    },
+    ModelInfo {
+        name: "whisper-large-v3-turbo",
+        size_mb: 1600,
+        description: "Whisper Large v3 Turbo — highest accuracy, 99 languages, ~1.6 GB",
+        backend: ModelBackend::Whisper,
+        files: &[ModelFile {
+            filename: "ggml-large-v3-turbo.bin",
+            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+            size_mb: 1600,
+        }],
+    },
+    ModelInfo {
+        name: "distil-whisper-large-v3",
+        size_mb: 1520,
+        description: "Distil-Whisper Large v3 — 6x faster Whisper, 99 languages, ~1.5 GB",
+        backend: ModelBackend::Whisper,
+        files: &[ModelFile {
+            filename: "ggml-distil-large-v3.bin",
+            url: "https://huggingface.co/distil-whisper/distil-large-v3-ggml/resolve/main/ggml-distil-large-v3.bin",
+            size_mb: 1520,
+        }],
+    },
+];
 
 /// Look up model info by name.
 pub fn find_model(name: &str) -> Option<&'static ModelInfo> {
@@ -202,9 +285,17 @@ mod tests {
 
     #[test]
     fn test_model_registry() {
-        assert_eq!(MODELS.len(), 1);
+        assert_eq!(MODELS.len(), 6);
         assert_eq!(MODELS[0].name, "parakeet-tdt-0.6b-v2");
         assert_eq!(MODELS[0].files.len(), 4);
+        assert_eq!(MODELS[0].backend, ModelBackend::Parakeet);
+        assert_eq!(MODELS[1].name, "parakeet-tdt-0.6b-v3");
+        assert_eq!(MODELS[1].files.len(), 4);
+        assert_eq!(MODELS[1].backend, ModelBackend::Parakeet);
+        assert_eq!(MODELS[2].name, "whisper-tiny");
+        assert_eq!(MODELS[2].backend, ModelBackend::Whisper);
+        assert_eq!(MODELS[2].files.len(), 1);
+        assert!(find_model("distil-whisper-large-v3").is_some());
     }
 
     #[test]

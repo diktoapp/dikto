@@ -1,7 +1,23 @@
 import SwiftUI
 
-extension Notification.Name {
-    static let openSettingsRequest = Notification.Name("openSettingsRequest")
+/// Dismiss the MenuBarExtra popover window by sending Escape to it.
+private func dismissMenuBarExtra() {
+    // Find the MenuBarExtra panel and close it
+    for window in NSApp.windows {
+        // MenuBarExtra .window style creates an NSPanel subclass
+        if window is NSPanel, window.isVisible, window.className.contains("StatusBarWindow")
+            || window.className.contains("MenuBarExtraWindow")
+            || (window.level.rawValue > NSWindow.Level.normal.rawValue && window.styleMask.contains(.nonactivatingPanel))
+        {
+            window.close()
+            return
+        }
+    }
+    // Fallback: post escape key to dismiss any popover
+    let esc = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true)
+    esc?.post(tap: .cghidEventTap)
+    let escUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false)
+    escUp?.post(tap: .cghidEventTap)
 }
 
 struct MenuBarView: View {
@@ -28,19 +44,28 @@ struct MenuBarView: View {
                 Text("⚠ \(error)")
             }
 
-            Text(appState.config?.modelName ?? "No model")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            HStack(spacing: 4) {
+                Text(appState.config?.modelName ?? "No model")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                if appState.modelInMemory {
+                    Text("(loaded)")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                }
+            }
 
             Divider()
 
             Button("Settings...") {
-                NotificationCenter.default.post(name: .openSettingsRequest, object: nil)
+                dismissMenuBarExtra()
+                SettingsWindowController.shared.show(appState: appState)
             }
 
             Divider()
 
             Button("Quit Sotto") {
+                dismissMenuBarExtra()
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
@@ -56,8 +81,8 @@ struct MenuBarView: View {
         if appState.isRecording {
             return "Recording..."
         }
-        if !appState.modelLoaded {
-            return "No model loaded"
+        if !appState.modelAvailable {
+            return "No model downloaded"
         }
         return "Ready"
     }

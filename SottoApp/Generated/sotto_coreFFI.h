@@ -251,6 +251,27 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD0
+typedef void (*UniffiCallbackInterfaceDownloadProgressCallbackMethod0)(uint64_t, uint64_t, uint64_t, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD1
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD1
+typedef void (*UniffiCallbackInterfaceDownloadProgressCallbackMethod1)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD2
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK_METHOD2
+typedef void (*UniffiCallbackInterfaceDownloadProgressCallbackMethod2)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_TRANSCRIPTION_CALLBACK_METHOD0
 #define UNIFFI_FFIDEF_CALLBACK_INTERFACE_TRANSCRIPTION_CALLBACK_METHOD0
 typedef void (*UniffiCallbackInterfaceTranscriptionCallbackMethod0)(uint64_t, RustBuffer, void* _Nonnull, 
@@ -286,6 +307,16 @@ typedef void (*UniffiCallbackInterfaceTranscriptionCallbackMethod4)(uint64_t, Ru
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_DOWNLOAD_PROGRESS_CALLBACK
+typedef struct UniffiVTableCallbackInterfaceDownloadProgressCallback {
+    UniffiCallbackInterfaceDownloadProgressCallbackMethod0 _Nonnull onProgress;
+    UniffiCallbackInterfaceDownloadProgressCallbackMethod1 _Nonnull onComplete;
+    UniffiCallbackInterfaceDownloadProgressCallbackMethod2 _Nonnull onError;
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+} UniffiVTableCallbackInterfaceDownloadProgressCallback;
+
+#endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_TRANSCRIPTION_CALLBACK
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_TRANSCRIPTION_CALLBACK
 typedef struct UniffiVTableCallbackInterfaceTranscriptionCallback {
@@ -297,6 +328,36 @@ typedef struct UniffiVTableCallbackInterfaceTranscriptionCallback {
     UniffiCallbackInterfaceFree _Nonnull uniffiFree;
 } UniffiVTableCallbackInterfaceTranscriptionCallback;
 
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_CLONE_DOWNLOADPROGRESSCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_CLONE_DOWNLOADPROGRESSCALLBACK
+void*_Nonnull uniffi_sotto_core_fn_clone_downloadprogresscallback(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_FREE_DOWNLOADPROGRESSCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_FREE_DOWNLOADPROGRESSCALLBACK
+void uniffi_sotto_core_fn_free_downloadprogresscallback(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_INIT_CALLBACK_VTABLE_DOWNLOADPROGRESSCALLBACK
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_INIT_CALLBACK_VTABLE_DOWNLOADPROGRESSCALLBACK
+void uniffi_sotto_core_fn_init_callback_vtable_downloadprogresscallback(const UniffiVTableCallbackInterfaceDownloadProgressCallback* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_PROGRESS
+void uniffi_sotto_core_fn_method_downloadprogresscallback_on_progress(void*_Nonnull ptr, uint64_t bytes_downloaded, uint64_t total_bytes, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_COMPLETE
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_COMPLETE
+void uniffi_sotto_core_fn_method_downloadprogresscallback_on_complete(void*_Nonnull ptr, RustBuffer model_name, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_ERROR
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_DOWNLOADPROGRESSCALLBACK_ON_ERROR
+void uniffi_sotto_core_fn_method_downloadprogresscallback_on_error(void*_Nonnull ptr, RustBuffer error, RustCallStatus *_Nonnull out_status
+);
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_CLONE_SESSIONHANDLE
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_CLONE_SESSIONHANDLE
@@ -334,9 +395,29 @@ void*_Nonnull uniffi_sotto_core_fn_constructor_sottoengine_new(RustCallStatus *_
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_AVAILABLE_LANGUAGES
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_AVAILABLE_LANGUAGES
+RustBuffer uniffi_sotto_core_fn_method_sottoengine_available_languages(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_DOWNLOAD_MODEL
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_DOWNLOAD_MODEL
+void uniffi_sotto_core_fn_method_sottoengine_download_model(void*_Nonnull ptr, RustBuffer model_name, void*_Nonnull callback, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_GET_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_GET_CONFIG
 RustBuffer uniffi_sotto_core_fn_method_sottoengine_get_config(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_IS_MODEL_AVAILABLE
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_IS_MODEL_AVAILABLE
+int8_t uniffi_sotto_core_fn_method_sottoengine_is_model_available(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_IS_MODEL_LOADED
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_IS_MODEL_LOADED
+int8_t uniffi_sotto_core_fn_method_sottoengine_is_model_loaded(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_IS_RECORDING
@@ -367,6 +448,11 @@ void*_Nonnull uniffi_sotto_core_fn_method_sottoengine_start_listening(void*_Nonn
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_SWITCH_MODEL
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_SWITCH_MODEL
 void uniffi_sotto_core_fn_method_sottoengine_switch_model(void*_Nonnull ptr, RustBuffer model_name, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_UNLOAD_MODEL
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_UNLOAD_MODEL
+void uniffi_sotto_core_fn_method_sottoengine_unload_model(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_FN_METHOD_SOTTOENGINE_UPDATE_CONFIG
@@ -694,6 +780,24 @@ void ffi_sotto_core_rust_future_free_void(uint64_t handle
 void ffi_sotto_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_PROGRESS
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_PROGRESS
+uint16_t uniffi_sotto_core_checksum_method_downloadprogresscallback_on_progress(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_COMPLETE
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_COMPLETE
+uint16_t uniffi_sotto_core_checksum_method_downloadprogresscallback_on_complete(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_ERROR
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_DOWNLOADPROGRESSCALLBACK_ON_ERROR
+uint16_t uniffi_sotto_core_checksum_method_downloadprogresscallback_on_error(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SESSIONHANDLE_IS_ACTIVE
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SESSIONHANDLE_IS_ACTIVE
 uint16_t uniffi_sotto_core_checksum_method_sessionhandle_is_active(void
@@ -706,9 +810,33 @@ uint16_t uniffi_sotto_core_checksum_method_sessionhandle_stop(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_AVAILABLE_LANGUAGES
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_AVAILABLE_LANGUAGES
+uint16_t uniffi_sotto_core_checksum_method_sottoengine_available_languages(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_DOWNLOAD_MODEL
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_DOWNLOAD_MODEL
+uint16_t uniffi_sotto_core_checksum_method_sottoengine_download_model(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_GET_CONFIG
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_GET_CONFIG
 uint16_t uniffi_sotto_core_checksum_method_sottoengine_get_config(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_IS_MODEL_AVAILABLE
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_IS_MODEL_AVAILABLE
+uint16_t uniffi_sotto_core_checksum_method_sottoengine_is_model_available(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_IS_MODEL_LOADED
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_IS_MODEL_LOADED
+uint16_t uniffi_sotto_core_checksum_method_sottoengine_is_model_loaded(void
     
 );
 #endif
@@ -745,6 +873,12 @@ uint16_t uniffi_sotto_core_checksum_method_sottoengine_start_listening(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_SWITCH_MODEL
 #define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_SWITCH_MODEL
 uint16_t uniffi_sotto_core_checksum_method_sottoengine_switch_model(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_UNLOAD_MODEL
+#define UNIFFI_FFIDEF_UNIFFI_SOTTO_CORE_CHECKSUM_METHOD_SOTTOENGINE_UNLOAD_MODEL
+uint16_t uniffi_sotto_core_checksum_method_sottoengine_unload_model(void
     
 );
 #endif

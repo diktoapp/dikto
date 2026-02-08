@@ -2,22 +2,24 @@ uniffi::setup_scaffolding!();
 
 pub mod audio;
 pub mod config;
+pub mod engine;
 pub mod models;
 pub mod transcribe;
 pub mod vad;
 
 use audio::{AudioCapture, AudioCaptureConfig, AudioError};
 use config::SottoConfig;
-use models::ModelError;
+use engine::{AsrEngine, AsrSession, LoadedEngine};
+use models::{ModelBackend, ModelError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use tracing::{debug, info, warn};
-use transcribe::{ParakeetEngine, TranscribeConfig, TranscribeError};
+use transcribe::{TranscribeConfig, TranscribeError};
 use vad::{VadConfig, VadError, VadEvent, VadProcessor};
 
-/// Old Whisper model names that should be auto-migrated to Parakeet.
-const WHISPER_MODEL_NAMES: &[&str] = &["tiny.en", "base.en", "small.en", "medium.en"];
+/// Old Whisper model names (v1) that should be auto-migrated to Parakeet.
+const OLD_WHISPER_MODEL_NAMES: &[&str] = &["tiny.en", "base.en", "small.en", "medium.en"];
 
 /// Errors from the Sotto engine.
 #[derive(Debug, Error, uniffi::Error)]
@@ -78,6 +80,14 @@ pub trait TranscriptionCallback: Send + Sync {
     fn on_state_change(&self, state: RecordingState);
 }
 
+/// Callbacks for model download progress.
+#[uniffi::export(with_foreign)]
+pub trait DownloadProgressCallback: Send + Sync {
+    fn on_progress(&self, bytes_downloaded: u64, total_bytes: u64);
+    fn on_complete(&self, model_name: String);
+    fn on_error(&self, error: String);
+}
+
 /// Configuration for a listening session.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ListenConfig {
@@ -135,16 +145,26 @@ pub struct ModelInfoRecord {
     pub size_mb: u32,
     pub description: String,
     pub is_downloaded: bool,
+    pub backend: String,
+}
+
+/// Language info record for FFI.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct LanguageInfo {
+    pub code: String,
+    pub name: String,
 }
 
 /// Inner state of SottoEngine, behind a Mutex for UniFFI compatibility.
 struct SottoEngineInner {
-    engine: Option<Arc<Mutex<ParakeetEngine>>>,
+    /// Shared engine holder — None when no model is loaded in RAM.
+    /// Arc allows sharing with pipeline threads for lazy loading.
+    engine: Arc<Mutex<Option<LoadedEngine>>>,
     config: SottoConfig,
     recording: Arc<AtomicBool>,
 }
 
-/// The main Sotto engine. Keeps the model loaded in memory.
+/// The main Sotto engine. Models are loaded lazily into RAM on first recording.
 #[derive(uniffi::Object)]
 pub struct SottoEngine {
     inner: Mutex<SottoEngineInner>,
@@ -152,16 +172,16 @@ pub struct SottoEngine {
 
 #[uniffi::export]
 impl SottoEngine {
-    /// Create a new SottoEngine. Does NOT load the model yet.
-    /// Auto-migrates old Whisper model configs to Parakeet.
+    /// Create a new SottoEngine. Does NOT load any model into RAM.
+    /// Auto-migrates old v1 Whisper model configs to Parakeet.
     #[uniffi::constructor]
     pub fn new() -> Self {
         let mut config = config::load_config();
 
-        // Auto-migrate old Whisper model names to Parakeet default
-        if WHISPER_MODEL_NAMES.contains(&config.model_name.as_str()) {
+        // Auto-migrate old v1 Whisper model names to Parakeet default
+        if OLD_WHISPER_MODEL_NAMES.contains(&config.model_name.as_str()) {
             warn!(
-                "Migrating config from Whisper model '{}' to Parakeet default",
+                "Migrating config from old Whisper model '{}' to Parakeet default",
                 config.model_name
             );
             config.model_name = config::default_model_name();
@@ -172,46 +192,71 @@ impl SottoEngine {
 
         Self {
             inner: Mutex::new(SottoEngineInner {
-                engine: None,
+                engine: Arc::new(Mutex::new(None)),
                 config,
                 recording: Arc::new(AtomicBool::new(false)),
             }),
         }
     }
 
-    /// Load the configured model. Call this once at startup.
+    /// Explicitly load the configured model into RAM.
+    /// Optional — start_listening() will lazy-load if needed.
     pub fn load_model(&self) -> Result<(), SottoError> {
-        let mut inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap();
         let model_name = inner.config.model_name.clone();
+        let model_info =
+            models::find_model(&model_name).ok_or(SottoError::NoModel)?;
         let path = models::model_path(&model_name).ok_or(SottoError::NoModel)?;
 
         if !models::is_model_downloaded(&model_name) {
             return Err(SottoError::NoModel);
         }
 
-        let engine = ParakeetEngine::load(&path)?;
-        inner.engine = Some(Arc::new(Mutex::new(engine)));
+        let asr = AsrEngine::load(model_info.backend, &path)?;
+        *inner.engine.lock().unwrap() = Some(LoadedEngine {
+            model_name: model_name.clone(),
+            engine: asr,
+        });
         info!("Model '{}' loaded and ready", model_name);
         Ok(())
     }
 
-    /// Switch to a different model (hot-swap).
+    /// Unload the current model from RAM, freeing memory.
+    pub fn unload_model(&self) {
+        let inner = self.inner.lock().unwrap();
+        let was_loaded = inner.engine.lock().unwrap().take().is_some();
+        if was_loaded {
+            info!("Model unloaded from RAM");
+        }
+    }
+
+    /// Switch to a different model. Unloads the current model from RAM.
+    /// The new model will be loaded lazily on next recording.
     pub fn switch_model(&self, model_name: String) -> Result<(), SottoError> {
         let mut inner = self.inner.lock().unwrap();
-        let path = models::model_path(&model_name).ok_or(SottoError::NoModel)?;
+
+        if inner.recording.load(Ordering::Relaxed) {
+            return Err(SottoError::AlreadyRecording);
+        }
+
+        // Verify model exists and is downloaded
+        let _ = models::find_model(&model_name).ok_or(SottoError::NoModel)?;
         if !models::is_model_downloaded(&model_name) {
             return Err(SottoError::NoModel);
         }
 
-        let engine = ParakeetEngine::load(&path)?;
-        inner.engine = Some(Arc::new(Mutex::new(engine)));
+        // Unload old model from RAM
+        *inner.engine.lock().unwrap() = None;
+
+        // Save new model choice
         inner.config.model_name = model_name.clone();
         config::save_config(&inner.config).map_err(|e| SottoError::Config(e.to_string()))?;
-        info!("Switched to model '{}'", model_name);
+        info!("Switched to model '{}' (will load on next recording)", model_name);
         Ok(())
     }
 
     /// Start listening and transcribing. Returns a handle to stop the session.
+    /// Lazy-loads the model into RAM if not already loaded.
     /// The final result is delivered via the callback's on_state_change(Done { text }).
     pub fn start_listening(
         &self,
@@ -224,16 +269,17 @@ impl SottoEngine {
             return Err(SottoError::AlreadyRecording);
         }
 
-        let engine = inner.engine.as_ref().ok_or(SottoError::NoModel)?.clone();
+        // Verify model is available on disk
+        let model_name = inner.config.model_name.clone();
+        let model_info =
+            models::find_model(&model_name).ok_or(SottoError::NoModel)?;
+        if !models::is_model_downloaded(&model_name) {
+            return Err(SottoError::NoModel);
+        }
 
-        let transcribe_config = TranscribeConfig {
-            language: listen_config.language.clone(),
-        };
-
-        let session = engine
-            .lock()
-            .map_err(|e| SottoError::Transcribe(format!("Lock poisoned: {e}")))?
-            .create_session(transcribe_config);
+        let engine_holder = inner.engine.clone();
+        let backend = model_info.backend;
+        let model_path = models::model_path(&model_name).unwrap();
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let handle = Arc::new(SessionHandle {
@@ -246,11 +292,53 @@ impl SottoEngine {
         let max_duration = listen_config.max_duration;
         let silence_duration_ms = listen_config.silence_duration_ms;
         let speech_threshold = listen_config.speech_threshold;
+        let language = listen_config.language.clone();
+
+        drop(inner); // Release outer lock before spawning
 
         std::thread::spawn(move || {
+            // Lazy-load model if needed
+            let needs_load = {
+                let guard = engine_holder.lock().unwrap();
+                match &*guard {
+                    Some(loaded) if loaded.model_name == model_name => false,
+                    _ => true,
+                }
+            };
+
+            if needs_load {
+                callback.on_state_change(RecordingState::Processing);
+                callback.on_partial("Loading model...".to_string());
+                eprintln!("[sotto] Lazy-loading model '{}'...", model_name);
+
+                match AsrEngine::load(backend, &model_path) {
+                    Ok(asr) => {
+                        *engine_holder.lock().unwrap() = Some(LoadedEngine {
+                            model_name: model_name.clone(),
+                            engine: asr,
+                        });
+                        eprintln!("[sotto] Model '{}' loaded into RAM", model_name);
+                    }
+                    Err(e) => {
+                        recording.store(false, Ordering::Relaxed);
+                        callback.on_state_change(RecordingState::Error {
+                            message: format!("Failed to load model: {e}"),
+                        });
+                        return;
+                    }
+                }
+            }
+
+            // Create transcription session
+            let transcribe_config = TranscribeConfig { language };
+            let session = {
+                let guard = engine_holder.lock().unwrap();
+                guard.as_ref().unwrap().engine.create_session(transcribe_config)
+            };
+
             let result = run_pipeline(
                 session,
-                &engine,
+                &engine_holder,
                 stop_flag,
                 callback.clone(),
                 max_duration,
@@ -302,8 +390,81 @@ impl SottoEngine {
                 size_mb: m.size_mb,
                 description: m.description.to_string(),
                 is_downloaded: downloaded,
+                backend: match m.backend {
+                    ModelBackend::Parakeet => "Parakeet".to_string(),
+                    ModelBackend::Whisper => "Whisper".to_string(),
+                },
             })
             .collect()
+    }
+
+    /// Download a model with progress reporting via callback.
+    pub fn download_model(
+        &self,
+        model_name: String,
+        callback: Arc<dyn DownloadProgressCallback>,
+    ) -> Result<(), SottoError> {
+        // Verify model exists
+        let _ = models::find_model(&model_name).ok_or_else(|| {
+            SottoError::Model(format!("Unknown model: {model_name}"))
+        })?;
+
+        let name = model_name.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+
+            rt.block_on(async {
+                let cb = callback.clone();
+                match models::download_model(&name, move |downloaded, total| {
+                    cb.on_progress(downloaded, total);
+                })
+                .await
+                {
+                    Ok(_) => callback.on_complete(name),
+                    Err(e) => callback.on_error(e.to_string()),
+                }
+            });
+        });
+
+        Ok(())
+    }
+
+    /// Get available languages for the currently configured model.
+    pub fn available_languages(&self) -> Vec<LanguageInfo> {
+        let inner = self.inner.lock().unwrap();
+        let model_name = &inner.config.model_name;
+
+        match models::find_model(model_name) {
+            Some(m) if m.backend == ModelBackend::Parakeet && model_name.contains("-v3") => {
+                parakeet_v3_languages()
+            }
+            Some(m) if m.backend == ModelBackend::Parakeet => vec![LanguageInfo {
+                code: "en".to_string(),
+                name: "English".to_string(),
+            }],
+            Some(m) if m.backend == ModelBackend::Whisper => whisper_languages(),
+            _ => vec![LanguageInfo {
+                code: "en".to_string(),
+                name: "English".to_string(),
+            }],
+        }
+    }
+
+    /// Check if the configured model's files are downloaded (available on disk).
+    /// This does NOT mean the model is loaded into RAM.
+    pub fn is_model_available(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        models::is_model_downloaded(&inner.config.model_name)
+    }
+
+    /// Check if a model is currently loaded in RAM.
+    pub fn is_model_loaded(&self) -> bool {
+        let inner = self.inner.lock().unwrap();
+        let engine_guard = inner.engine.lock().unwrap();
+        engine_guard.is_some()
     }
 
     /// Check if currently recording.
@@ -319,8 +480,8 @@ impl SottoEngine {
 
 /// The main recording + transcription pipeline, runs on a background thread.
 fn run_pipeline(
-    mut session: transcribe::TranscribeSession,
-    engine: &Arc<Mutex<ParakeetEngine>>,
+    mut session: AsrSession,
+    engine: &Arc<Mutex<Option<LoadedEngine>>>,
     stop_flag: Arc<AtomicBool>,
     callback: Arc<dyn TranscriptionCallback>,
     max_duration: u32,
@@ -447,4 +608,85 @@ fn run_pipeline(
 
     capture.stop();
     Ok(text)
+}
+
+/// Parakeet TDT v3 supported languages (25 European languages).
+fn parakeet_v3_languages() -> Vec<LanguageInfo> {
+    [
+        ("en", "English"),
+        ("de", "German"),
+        ("es", "Spanish"),
+        ("fr", "French"),
+        ("it", "Italian"),
+        ("pt", "Portuguese"),
+        ("nl", "Dutch"),
+        ("pl", "Polish"),
+        ("ru", "Russian"),
+        ("uk", "Ukrainian"),
+        ("cs", "Czech"),
+        ("ro", "Romanian"),
+        ("hu", "Hungarian"),
+        ("el", "Greek"),
+        ("bg", "Bulgarian"),
+        ("hr", "Croatian"),
+        ("sk", "Slovak"),
+        ("sl", "Slovenian"),
+        ("lt", "Lithuanian"),
+        ("lv", "Latvian"),
+        ("et", "Estonian"),
+        ("fi", "Finnish"),
+        ("da", "Danish"),
+        ("sv", "Swedish"),
+        ("no", "Norwegian"),
+    ]
+    .iter()
+    .map(|(code, name)| LanguageInfo {
+        code: code.to_string(),
+        name: name.to_string(),
+    })
+    .collect()
+}
+
+/// Top Whisper-supported languages.
+fn whisper_languages() -> Vec<LanguageInfo> {
+    [
+        ("auto", "Auto-detect"),
+        ("en", "English"),
+        ("zh", "Chinese"),
+        ("de", "German"),
+        ("es", "Spanish"),
+        ("ru", "Russian"),
+        ("ko", "Korean"),
+        ("fr", "French"),
+        ("ja", "Japanese"),
+        ("pt", "Portuguese"),
+        ("tr", "Turkish"),
+        ("pl", "Polish"),
+        ("ca", "Catalan"),
+        ("nl", "Dutch"),
+        ("ar", "Arabic"),
+        ("sv", "Swedish"),
+        ("it", "Italian"),
+        ("id", "Indonesian"),
+        ("hi", "Hindi"),
+        ("fi", "Finnish"),
+        ("vi", "Vietnamese"),
+        ("he", "Hebrew"),
+        ("uk", "Ukrainian"),
+        ("el", "Greek"),
+        ("ms", "Malay"),
+        ("cs", "Czech"),
+        ("ro", "Romanian"),
+        ("da", "Danish"),
+        ("hu", "Hungarian"),
+        ("ta", "Tamil"),
+        ("no", "Norwegian"),
+        ("th", "Thai"),
+    ]
+    .iter()
+    .map(|(code, name)| LanguageInfo {
+        code: code.to_string(),
+        name: name.to_string(),
+    })
+    .collect()
 }

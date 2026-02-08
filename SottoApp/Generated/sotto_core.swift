@@ -422,6 +422,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterFloat: FfiConverterPrimitive {
     typealias FfiType = Float
     typealias SwiftType = Float
@@ -499,6 +515,254 @@ fileprivate struct FfiConverterString: FfiConverter {
         writeBytes(&buf, value.utf8)
     }
 }
+
+
+
+
+/**
+ * Callbacks for model download progress.
+ */
+public protocol DownloadProgressCallback: AnyObject, Sendable {
+    
+    func onProgress(bytesDownloaded: UInt64, totalBytes: UInt64) 
+    
+    func onComplete(modelName: String) 
+    
+    func onError(error: String) 
+    
+}
+/**
+ * Callbacks for model download progress.
+ */
+open class DownloadProgressCallbackImpl: DownloadProgressCallback, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_sotto_core_fn_clone_downloadprogresscallback(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_sotto_core_fn_free_downloadprogresscallback(pointer, $0) }
+    }
+
+    
+
+    
+open func onProgress(bytesDownloaded: UInt64, totalBytes: UInt64)  {try! rustCall() {
+    uniffi_sotto_core_fn_method_downloadprogresscallback_on_progress(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(bytesDownloaded),
+        FfiConverterUInt64.lower(totalBytes),$0
+    )
+}
+}
+    
+open func onComplete(modelName: String)  {try! rustCall() {
+    uniffi_sotto_core_fn_method_downloadprogresscallback_on_complete(self.uniffiClonePointer(),
+        FfiConverterString.lower(modelName),$0
+    )
+}
+}
+    
+open func onError(error: String)  {try! rustCall() {
+    uniffi_sotto_core_fn_method_downloadprogresscallback_on_error(self.uniffiClonePointer(),
+        FfiConverterString.lower(error),$0
+    )
+}
+}
+    
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceDownloadProgressCallback {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceDownloadProgressCallback] = [UniffiVTableCallbackInterfaceDownloadProgressCallback(
+        onProgress: { (
+            uniffiHandle: UInt64,
+            bytesDownloaded: UInt64,
+            totalBytes: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeDownloadProgressCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onProgress(
+                     bytesDownloaded: try FfiConverterUInt64.lift(bytesDownloaded),
+                     totalBytes: try FfiConverterUInt64.lift(totalBytes)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onComplete: { (
+            uniffiHandle: UInt64,
+            modelName: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeDownloadProgressCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onComplete(
+                     modelName: try FfiConverterString.lift(modelName)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onError: { (
+            uniffiHandle: UInt64,
+            error: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeDownloadProgressCallback.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onError(
+                     error: try FfiConverterString.lift(error)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeDownloadProgressCallback.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface DownloadProgressCallback: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitDownloadProgressCallback() {
+    uniffi_sotto_core_fn_init_callback_vtable_downloadprogresscallback(UniffiCallbackInterfaceDownloadProgressCallback.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDownloadProgressCallback: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<DownloadProgressCallback>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DownloadProgressCallback
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DownloadProgressCallback {
+        return DownloadProgressCallbackImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DownloadProgressCallback) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DownloadProgressCallback {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DownloadProgressCallback, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadProgressCallback_lift(_ pointer: UnsafeMutableRawPointer) throws -> DownloadProgressCallback {
+    return try FfiConverterTypeDownloadProgressCallback.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadProgressCallback_lower(_ value: DownloadProgressCallback) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDownloadProgressCallback.lower(value)
+}
+
+
 
 
 
@@ -652,14 +916,35 @@ public func FfiConverterTypeSessionHandle_lower(_ value: SessionHandle) -> Unsaf
 
 
 /**
- * The main Sotto engine. Keeps the model loaded in memory.
+ * The main Sotto engine. Models are loaded lazily into RAM on first recording.
  */
 public protocol SottoEngineProtocol: AnyObject, Sendable {
+    
+    /**
+     * Get available languages for the currently configured model.
+     */
+    func availableLanguages()  -> [LanguageInfo]
+    
+    /**
+     * Download a model with progress reporting via callback.
+     */
+    func downloadModel(modelName: String, callback: DownloadProgressCallback) throws 
     
     /**
      * Get a copy of the current config.
      */
     func getConfig()  -> SottoConfig
+    
+    /**
+     * Check if the configured model's files are downloaded (available on disk).
+     * This does NOT mean the model is loaded into RAM.
+     */
+    func isModelAvailable()  -> Bool
+    
+    /**
+     * Check if a model is currently loaded in RAM.
+     */
+    func isModelLoaded()  -> Bool
     
     /**
      * Check if currently recording.
@@ -672,7 +957,8 @@ public protocol SottoEngineProtocol: AnyObject, Sendable {
     func listModels()  -> [ModelInfoRecord]
     
     /**
-     * Load the configured model. Call this once at startup.
+     * Explicitly load the configured model into RAM.
+     * Optional — start_listening() will lazy-load if needed.
      */
     func loadModel() throws 
     
@@ -683,14 +969,21 @@ public protocol SottoEngineProtocol: AnyObject, Sendable {
     
     /**
      * Start listening and transcribing. Returns a handle to stop the session.
+     * Lazy-loads the model into RAM if not already loaded.
      * The final result is delivered via the callback's on_state_change(Done { text }).
      */
     func startListening(listenConfig: ListenConfig, callback: TranscriptionCallback) throws  -> SessionHandle
     
     /**
-     * Switch to a different model (hot-swap).
+     * Switch to a different model. Unloads the current model from RAM.
+     * The new model will be loaded lazily on next recording.
      */
     func switchModel(modelName: String) throws 
+    
+    /**
+     * Unload the current model from RAM, freeing memory.
+     */
+    func unloadModel() 
     
     /**
      * Update config and save.
@@ -699,7 +992,7 @@ public protocol SottoEngineProtocol: AnyObject, Sendable {
     
 }
 /**
- * The main Sotto engine. Keeps the model loaded in memory.
+ * The main Sotto engine. Models are loaded lazily into RAM on first recording.
  */
 open class SottoEngine: SottoEngineProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -741,8 +1034,8 @@ open class SottoEngine: SottoEngineProtocol, @unchecked Sendable {
         return try! rustCall { uniffi_sotto_core_fn_clone_sottoengine(self.pointer, $0) }
     }
     /**
-     * Create a new SottoEngine. Does NOT load the model yet.
-     * Auto-migrates old Whisper model configs to Parakeet.
+     * Create a new SottoEngine. Does NOT load any model into RAM.
+     * Auto-migrates old v1 Whisper model configs to Parakeet.
      */
 public convenience init() {
     let pointer =
@@ -765,11 +1058,53 @@ public convenience init() {
 
     
     /**
+     * Get available languages for the currently configured model.
+     */
+open func availableLanguages() -> [LanguageInfo]  {
+    return try!  FfiConverterSequenceTypeLanguageInfo.lift(try! rustCall() {
+    uniffi_sotto_core_fn_method_sottoengine_available_languages(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Download a model with progress reporting via callback.
+     */
+open func downloadModel(modelName: String, callback: DownloadProgressCallback)throws   {try rustCallWithError(FfiConverterTypeSottoError_lift) {
+    uniffi_sotto_core_fn_method_sottoengine_download_model(self.uniffiClonePointer(),
+        FfiConverterString.lower(modelName),
+        FfiConverterTypeDownloadProgressCallback_lower(callback),$0
+    )
+}
+}
+    
+    /**
      * Get a copy of the current config.
      */
 open func getConfig() -> SottoConfig  {
     return try!  FfiConverterTypeSottoConfig_lift(try! rustCall() {
     uniffi_sotto_core_fn_method_sottoengine_get_config(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Check if the configured model's files are downloaded (available on disk).
+     * This does NOT mean the model is loaded into RAM.
+     */
+open func isModelAvailable() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_sotto_core_fn_method_sottoengine_is_model_available(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Check if a model is currently loaded in RAM.
+     */
+open func isModelLoaded() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_sotto_core_fn_method_sottoengine_is_model_loaded(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -795,7 +1130,8 @@ open func listModels() -> [ModelInfoRecord]  {
 }
     
     /**
-     * Load the configured model. Call this once at startup.
+     * Explicitly load the configured model into RAM.
+     * Optional — start_listening() will lazy-load if needed.
      */
 open func loadModel()throws   {try rustCallWithError(FfiConverterTypeSottoError_lift) {
     uniffi_sotto_core_fn_method_sottoengine_load_model(self.uniffiClonePointer(),$0
@@ -815,6 +1151,7 @@ open func modelsDir() -> String  {
     
     /**
      * Start listening and transcribing. Returns a handle to stop the session.
+     * Lazy-loads the model into RAM if not already loaded.
      * The final result is delivered via the callback's on_state_change(Done { text }).
      */
 open func startListening(listenConfig: ListenConfig, callback: TranscriptionCallback)throws  -> SessionHandle  {
@@ -827,11 +1164,21 @@ open func startListening(listenConfig: ListenConfig, callback: TranscriptionCall
 }
     
     /**
-     * Switch to a different model (hot-swap).
+     * Switch to a different model. Unloads the current model from RAM.
+     * The new model will be loaded lazily on next recording.
      */
 open func switchModel(modelName: String)throws   {try rustCallWithError(FfiConverterTypeSottoError_lift) {
     uniffi_sotto_core_fn_method_sottoengine_switch_model(self.uniffiClonePointer(),
         FfiConverterString.lower(modelName),$0
+    )
+}
+}
+    
+    /**
+     * Unload the current model from RAM, freeing memory.
+     */
+open func unloadModel()  {try! rustCall() {
+    uniffi_sotto_core_fn_method_sottoengine_unload_model(self.uniffiClonePointer(),$0
     )
 }
 }
@@ -1211,6 +1558,79 @@ public func FfiConverterTypeTranscriptionCallback_lower(_ value: TranscriptionCa
 
 
 /**
+ * Language info record for FFI.
+ */
+public struct LanguageInfo {
+    public var code: String
+    public var name: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(code: String, name: String) {
+        self.code = code
+        self.name = name
+    }
+}
+
+#if compiler(>=6)
+extension LanguageInfo: Sendable {}
+#endif
+
+
+extension LanguageInfo: Equatable, Hashable {
+    public static func ==(lhs: LanguageInfo, rhs: LanguageInfo) -> Bool {
+        if lhs.code != rhs.code {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(code)
+        hasher.combine(name)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLanguageInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LanguageInfo {
+        return
+            try LanguageInfo(
+                code: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LanguageInfo, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.code, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanguageInfo_lift(_ buf: RustBuffer) throws -> LanguageInfo {
+    return try FfiConverterTypeLanguageInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanguageInfo_lower(_ value: LanguageInfo) -> RustBuffer {
+    return FfiConverterTypeLanguageInfo.lower(value)
+}
+
+
+/**
  * Configuration for a listening session.
  */
 public struct ListenConfig {
@@ -1307,14 +1727,16 @@ public struct ModelInfoRecord {
     public var sizeMb: UInt32
     public var description: String
     public var isDownloaded: Bool
+    public var backend: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: String, sizeMb: UInt32, description: String, isDownloaded: Bool) {
+    public init(name: String, sizeMb: UInt32, description: String, isDownloaded: Bool, backend: String) {
         self.name = name
         self.sizeMb = sizeMb
         self.description = description
         self.isDownloaded = isDownloaded
+        self.backend = backend
     }
 }
 
@@ -1337,6 +1759,9 @@ extension ModelInfoRecord: Equatable, Hashable {
         if lhs.isDownloaded != rhs.isDownloaded {
             return false
         }
+        if lhs.backend != rhs.backend {
+            return false
+        }
         return true
     }
 
@@ -1345,6 +1770,7 @@ extension ModelInfoRecord: Equatable, Hashable {
         hasher.combine(sizeMb)
         hasher.combine(description)
         hasher.combine(isDownloaded)
+        hasher.combine(backend)
     }
 }
 
@@ -1360,7 +1786,8 @@ public struct FfiConverterTypeModelInfoRecord: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf), 
                 sizeMb: FfiConverterUInt32.read(from: &buf), 
                 description: FfiConverterString.read(from: &buf), 
-                isDownloaded: FfiConverterBool.read(from: &buf)
+                isDownloaded: FfiConverterBool.read(from: &buf), 
+                backend: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -1369,6 +1796,7 @@ public struct FfiConverterTypeModelInfoRecord: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.sizeMb, into: &buf)
         FfiConverterString.write(value.description, into: &buf)
         FfiConverterBool.write(value.isDownloaded, into: &buf)
+        FfiConverterString.write(value.backend, into: &buf)
     }
 }
 
@@ -1759,6 +2187,31 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeLanguageInfo: FfiConverterRustBuffer {
+    typealias SwiftType = [LanguageInfo]
+
+    public static func write(_ value: [LanguageInfo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLanguageInfo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LanguageInfo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LanguageInfo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLanguageInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeModelInfoRecord: FfiConverterRustBuffer {
     typealias SwiftType = [ModelInfoRecord]
 
@@ -1796,13 +2249,34 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_sotto_core_checksum_method_downloadprogresscallback_on_progress() != 40517) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_downloadprogresscallback_on_complete() != 48702) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_downloadprogresscallback_on_error() != 55289) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sotto_core_checksum_method_sessionhandle_is_active() != 63138) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sotto_core_checksum_method_sessionhandle_stop() != 60694) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_sotto_core_checksum_method_sottoengine_available_languages() != 63179) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_sottoengine_download_model() != 39712) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_sotto_core_checksum_method_sottoengine_get_config() != 25573) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_sottoengine_is_model_available() != 19962) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_sottoengine_is_model_loaded() != 64440) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sotto_core_checksum_method_sottoengine_is_recording() != 31361) {
@@ -1811,16 +2285,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sotto_core_checksum_method_sottoengine_list_models() != 62863) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sotto_core_checksum_method_sottoengine_load_model() != 25216) {
+    if (uniffi_sotto_core_checksum_method_sottoengine_load_model() != 7304) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sotto_core_checksum_method_sottoengine_models_dir() != 35747) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sotto_core_checksum_method_sottoengine_start_listening() != 30136) {
+    if (uniffi_sotto_core_checksum_method_sottoengine_start_listening() != 25067) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sotto_core_checksum_method_sottoengine_switch_model() != 25764) {
+    if (uniffi_sotto_core_checksum_method_sottoengine_switch_model() != 3067) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_sotto_core_checksum_method_sottoengine_unload_model() != 46418) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_sotto_core_checksum_method_sottoengine_update_config() != 33672) {
@@ -1841,10 +2318,11 @@ private let initializationResult: InitializationResult = {
     if (uniffi_sotto_core_checksum_method_transcriptioncallback_on_state_change() != 43395) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_sotto_core_checksum_constructor_sottoengine_new() != 64166) {
+    if (uniffi_sotto_core_checksum_constructor_sottoengine_new() != 61004) {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitDownloadProgressCallback()
     uniffiCallbackInitTranscriptionCallback()
     return InitializationResult.ok
 }()

@@ -11,6 +11,7 @@ name = "sotto_core"
 [dependencies]
 uniffi = { version = "0.29", features = ["cli"] }
 parakeet-rs = "0.2"
+whisper-rs = "0.13"
 ort = "=2.0.0-rc.10"
 cpal = "0.15"
 voice_activity_detector = "0.2.1"

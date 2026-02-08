@@ -18,7 +18,7 @@ struct SettingsView: View {
                     Label("Models", systemImage: "cpu")
                 }
         }
-        .frame(width: 420, height: 320)
+        .frame(width: 420, height: 400)
     }
 }
 
@@ -28,6 +28,7 @@ struct GeneralSettingsView: View {
     @State private var autoPaste = true
     @State private var maxDuration: Double = 30
     @State private var silenceDuration: Double = 1500
+    @State private var selectedLanguage = "en"
     @State private var launchAtLogin = false
     @State private var loaded = false
 
@@ -49,6 +50,20 @@ struct GeneralSettingsView: View {
                             if autoPaste { autoCopy = true }
                             saveSettings()
                         }
+                }
+
+                if appState.availableLanguages.count > 1 {
+                    Section {
+                        Picker("Language", selection: $selectedLanguage) {
+                            ForEach(appState.availableLanguages, id: \.code) { lang in
+                                Text(lang.name).tag(lang.code)
+                            }
+                        }
+                        .onChange(of: selectedLanguage) {
+                            guard loaded else { return }
+                            saveSettings()
+                        }
+                    }
                 }
 
                 Section {
@@ -81,6 +96,11 @@ struct GeneralSettingsView: View {
         }
         .onAppear { loadSettings() }
         .onReceive(appState.$config) { _ in if !loaded { loadSettings() } }
+        .onReceive(appState.$availableLanguages) { _ in
+            if loaded, let cfg = appState.config {
+                selectedLanguage = cfg.language
+            }
+        }
     }
 
     private func formatMs(_ ms: Int) -> String {
@@ -96,6 +116,7 @@ struct GeneralSettingsView: View {
         autoPaste = cfg.autoPaste
         maxDuration = Double(cfg.maxDuration)
         silenceDuration = Double(cfg.silenceDurationMs)
+        selectedLanguage = cfg.language
         loadLaunchAtLogin()
         loaded = true
     }
@@ -121,7 +142,7 @@ struct GeneralSettingsView: View {
         guard let cfg = appState.config else { return }
         let newConfig = SottoConfig(
             modelName: cfg.modelName,
-            language: cfg.language,
+            language: selectedLanguage,
             maxDuration: UInt32(maxDuration),
             silenceDurationMs: UInt32(silenceDuration),
             speechThreshold: cfg.speechThreshold,
@@ -150,6 +171,21 @@ struct ModelsSettingsView: View {
                                         .foregroundStyle(.green)
                                         .font(.caption)
                                 }
+                                Text(model.backend)
+                                    .font(.system(size: 9, weight: .medium))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(
+                                        model.backend == "Parakeet"
+                                            ? Color.blue.opacity(0.15)
+                                            : Color.purple.opacity(0.15)
+                                    )
+                                    .foregroundStyle(
+                                        model.backend == "Parakeet"
+                                            ? Color.blue
+                                            : Color.purple
+                                    )
+                                    .cornerRadius(3)
                             }
                             Text(model.description)
                                 .font(.caption)
@@ -163,7 +199,10 @@ struct ModelsSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
 
-                        if model.isDownloaded {
+                        if let progress = appState.downloadProgress[model.name] {
+                            ProgressView(value: progress)
+                                .frame(width: 60)
+                        } else if model.isDownloaded {
                             if !isActive(model) {
                                 Button("Use") {
                                     appState.switchModel(name: model.name)
@@ -175,9 +214,10 @@ struct ModelsSettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         } else {
-                            Text("Not downloaded")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
+                            Button("Download") {
+                                appState.downloadModel(name: model.name)
+                            }
+                            .controlSize(.small)
                         }
                     }
                     .padding(.vertical, 2)
@@ -186,10 +226,10 @@ struct ModelsSettingsView: View {
             .listStyle(.inset(alternatesRowBackgrounds: true))
 
             HStack {
-                Text("Download models via terminal:")
+                Text("Or via terminal:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("sotto --setup")
+                Text("sotto --setup --model <name>")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer()

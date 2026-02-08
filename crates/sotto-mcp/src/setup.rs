@@ -1,8 +1,9 @@
 use sotto_core::config::{self, SottoConfig};
 use sotto_core::models;
 
-/// Run the setup command: download the default model and create config.
-pub async fn run_setup() -> anyhow::Result<()> {
+/// Run the setup command: download a model and create config.
+/// If `model_name` is None, downloads the default model (parakeet-tdt-0.6b-v2).
+pub async fn run_setup(model_name: Option<&str>) -> anyhow::Result<()> {
     eprintln!("Sotto Setup");
     eprintln!("===========\n");
 
@@ -22,16 +23,38 @@ pub async fn run_setup() -> anyhow::Result<()> {
         eprintln!("Config already exists at {}", config_path.display());
     }
 
-    // Download default model (Parakeet TDT) if not present
-    let model_name = "parakeet-tdt-0.6b-v2";
+    // Resolve model name
+    let model_name = model_name.unwrap_or("parakeet-tdt-0.6b-v2");
+
+    // Validate model name
+    let model = match models::find_model(model_name) {
+        Some(m) => m,
+        None => {
+            eprintln!("Unknown model: '{model_name}'\n");
+            eprintln!("Available models:");
+            for (m, downloaded) in models::list_models() {
+                let status = if downloaded { "downloaded" } else { "not downloaded" };
+                eprintln!(
+                    "  {:<30} {:>8} MB  ({})  [{}]",
+                    m.name,
+                    m.size_mb,
+                    m.description,
+                    status
+                );
+            }
+            anyhow::bail!("Invalid model name: {model_name}");
+        }
+    };
+
+    // Download model if not present
     if models::is_model_downloaded(model_name) {
         eprintln!("Model '{model_name}' already downloaded.");
     } else {
-        let model = models::find_model(model_name).unwrap();
         eprintln!(
-            "Downloading model '{model_name}' (~{} MB, {} files)...",
+            "Downloading model '{model_name}' (~{} MB, {} file{})...",
             model.size_mb,
-            model.files.len()
+            model.files.len(),
+            if model.files.len() == 1 { "" } else { "s" }
         );
 
         let total_bytes: u64 = model.files.iter().map(|f| f.size_mb as u64 * 1024 * 1024).sum();

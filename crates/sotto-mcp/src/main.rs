@@ -13,6 +13,10 @@ struct Cli {
     /// Download model and create default config
     #[arg(long)]
     setup: bool,
+
+    /// Model to download (use with --setup). Default: parakeet-tdt-0.6b-v2
+    #[arg(long)]
+    model: Option<String>,
 }
 
 #[tokio::main]
@@ -20,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if cli.setup {
-        setup::run_setup().await?;
+        setup::run_setup(cli.model.as_deref()).await?;
         return Ok(());
     }
 

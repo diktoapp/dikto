@@ -4,6 +4,7 @@ use thiserror::Error;
 use tracing::info;
 
 use parakeet_rs::{ParakeetTDT, Transcriber};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 #[derive(Debug, Error)]
 pub enum TranscribeError {
@@ -70,7 +71,7 @@ impl ParakeetEngine {
 
     /// Run batch inference on audio samples.
     /// Returns the transcribed text.
-    fn transcribe(&mut self, samples: &[f32]) -> Result<String, TranscribeError> {
+    pub fn transcribe(&mut self, samples: &[f32]) -> Result<String, TranscribeError> {
         let result = self
             .model
             .transcribe_samples(samples.to_vec(), 16000, 1, None)
@@ -131,6 +132,172 @@ impl TranscribeSession {
         let start = std::time::Instant::now();
         let text = engine.transcribe(&self.audio_buffer)?;
         eprintln!("[sotto] flush: inference done in {:.1}s", start.elapsed().as_secs_f32());
+        self.audio_buffer.clear();
+
+        let text = text.trim().to_string();
+        if text.is_empty() || is_hallucination(&text) {
+            return Ok(Vec::new());
+        }
+
+        Ok(vec![TranscriptSegment {
+            text,
+            is_final: true,
+        }])
+    }
+
+    /// Get accumulated audio buffer length in seconds.
+    pub fn buffer_duration_secs(&self) -> f32 {
+        self.audio_buffer.len() as f32 / 16000.0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Whisper engine (whisper.cpp via whisper-rs)
+// ---------------------------------------------------------------------------
+
+/// Whisper engine that keeps the model loaded in memory.
+pub struct WhisperEngine {
+    ctx: WhisperContext,
+}
+
+// WhisperContext wraps a C pointer — we guard access via Mutex externally.
+unsafe impl Send for WhisperEngine {}
+unsafe impl Sync for WhisperEngine {}
+
+impl WhisperEngine {
+    /// Load a Whisper GGML model from a directory.
+    /// The directory must contain a single `.bin` file.
+    pub fn load(model_dir: &Path) -> Result<Self, TranscribeError> {
+        info!("Loading Whisper model from {}", model_dir.display());
+
+        // Find the .bin file in the model directory
+        let bin_path = std::fs::read_dir(model_dir)
+            .map_err(|e| TranscribeError::ModelLoad(e.to_string()))?
+            .filter_map(|entry| entry.ok())
+            .find(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .map(|ext| ext == "bin")
+                    .unwrap_or(false)
+            })
+            .map(|entry| entry.path())
+            .ok_or_else(|| {
+                TranscribeError::ModelLoad("No .bin file found in model directory".to_string())
+            })?;
+
+        let ctx = WhisperContext::new_with_params(
+            bin_path.to_str().unwrap_or_default(),
+            WhisperContextParameters::default(),
+        )
+        .map_err(|e| TranscribeError::ModelLoad(format!("whisper init failed: {e}")))?;
+
+        info!("Whisper model loaded successfully");
+        Ok(Self { ctx })
+    }
+
+    /// Create a new Whisper transcription session.
+    pub fn create_session(&self, _config: TranscribeConfig) -> WhisperSession {
+        WhisperSession {
+            audio_buffer: Vec::new(),
+        }
+    }
+
+    /// Run batch inference on audio samples.
+    /// `language` should be an ISO-639-1 code (e.g. "en", "es") or "auto".
+    pub fn transcribe(&self, samples: &[f32], language: &str) -> Result<String, TranscribeError> {
+        let mut state = self
+            .ctx
+            .create_state()
+            .map_err(|e| TranscribeError::Inference(format!("create state: {e}")))?;
+
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+
+        if language == "auto" {
+            params.set_language(None);
+        } else {
+            params.set_language(Some(language));
+        }
+
+        // Disable token timestamps for speed
+        params.set_token_timestamps(false);
+        // Single-segment mode
+        params.set_single_segment(false);
+        params.set_print_special(false);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_timestamps(false);
+
+        state
+            .full(params, samples)
+            .map_err(|e| TranscribeError::Inference(format!("whisper inference: {e}")))?;
+
+        let n_segments = state.full_n_segments().map_err(|e| {
+            TranscribeError::Inference(format!("get segments: {e}"))
+        })?;
+
+        let mut text = String::new();
+        for i in 0..n_segments {
+            if let Ok(seg) = state.full_get_segment_text(i) {
+                text.push_str(&seg);
+            }
+        }
+
+        Ok(text)
+    }
+}
+
+/// A Whisper transcription session that accumulates audio for batch inference.
+pub struct WhisperSession {
+    audio_buffer: Vec<f32>,
+}
+
+impl WhisperSession {
+    /// Feed audio samples (16kHz mono f32).
+    pub fn feed_samples(&mut self, samples: &[f32]) -> Vec<TranscriptSegment> {
+        self.audio_buffer.extend_from_slice(samples);
+        Vec::new()
+    }
+
+    /// Run batch inference on the accumulated audio buffer.
+    pub fn flush(
+        &mut self,
+        engine: &Arc<Mutex<WhisperEngine>>,
+        language: &str,
+    ) -> Result<Vec<TranscriptSegment>, TranscribeError> {
+        if self.audio_buffer.is_empty() {
+            eprintln!("[sotto] whisper flush: buffer empty, skipping");
+            return Ok(Vec::new());
+        }
+
+        eprintln!(
+            "[sotto] whisper flush: {:.1}s of audio ({} samples)",
+            self.audio_buffer.len() as f32 / 16000.0,
+            self.audio_buffer.len()
+        );
+
+        // Whisper can handle up to ~30 minutes, but cap at 4 min to match Parakeet behavior
+        const MAX_SAMPLES: usize = 4 * 60 * 16000;
+        if self.audio_buffer.len() > MAX_SAMPLES {
+            info!(
+                "Truncating audio from {:.1}s to 240s",
+                self.audio_buffer.len() as f32 / 16000.0
+            );
+            self.audio_buffer.truncate(MAX_SAMPLES);
+        }
+
+        eprintln!("[sotto] whisper flush: acquiring engine lock...");
+        let engine = engine
+            .lock()
+            .map_err(|e| TranscribeError::Inference(format!("Lock poisoned: {e}")))?;
+        eprintln!("[sotto] whisper flush: lock acquired, running inference...");
+
+        let start = std::time::Instant::now();
+        let text = engine.transcribe(&self.audio_buffer, language)?;
+        eprintln!(
+            "[sotto] whisper flush: inference done in {:.1}s",
+            start.elapsed().as_secs_f32()
+        );
         self.audio_buffer.clear();
 
         let text = text.trim().to_string();
