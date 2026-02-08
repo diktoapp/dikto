@@ -1,7 +1,6 @@
 uniffi::setup_scaffolding!();
 
 pub mod audio;
-pub mod clipboard;
 pub mod config;
 pub mod models;
 pub mod transcribe;
@@ -63,7 +62,6 @@ impl From<ModelError> for SottoError {
 /// Recording state enum.
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
 pub enum RecordingState {
-    Idle,
     Listening,
     Processing,
     Done { text: String },
@@ -254,7 +252,6 @@ impl SottoEngine {
                 session,
                 &engine,
                 stop_flag,
-                recording.clone(),
                 callback.clone(),
                 max_duration,
                 silence_duration_ms,
@@ -325,7 +322,6 @@ fn run_pipeline(
     mut session: transcribe::TranscribeSession,
     engine: &Arc<Mutex<ParakeetEngine>>,
     stop_flag: Arc<AtomicBool>,
-    _recording: Arc<AtomicBool>,
     callback: Arc<dyn TranscriptionCallback>,
     max_duration: u32,
     silence_duration_ms: u32,

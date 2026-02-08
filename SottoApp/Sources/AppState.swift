@@ -46,9 +46,6 @@ final class AppCallback: TranscriptionCallback {
                 return
             }
             switch state {
-            case .idle:
-                appState.isRecording = false
-                appState.isProcessing = false
             case .listening:
                 appState.isRecording = true
                 appState.isProcessing = false

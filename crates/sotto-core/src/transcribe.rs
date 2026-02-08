@@ -62,9 +62,8 @@ impl ParakeetEngine {
     }
 
     /// Create a new transcription session.
-    pub fn create_session(&self, config: TranscribeConfig) -> TranscribeSession {
+    pub fn create_session(&self, _config: TranscribeConfig) -> TranscribeSession {
         TranscribeSession {
-            config,
             audio_buffer: Vec::new(),
         }
     }
@@ -83,8 +82,6 @@ impl ParakeetEngine {
 
 /// A transcription session that accumulates audio for batch inference.
 pub struct TranscribeSession {
-    #[allow(dead_code)]
-    config: TranscribeConfig,
     /// Accumulated audio buffer (16kHz mono f32).
     audio_buffer: Vec<f32>,
 }
@@ -147,13 +144,6 @@ impl TranscribeSession {
         }])
     }
 
-    /// Get the full transcript text from the last flush.
-    /// (In batch mode, call after flush.)
-    pub fn transcript(&self) -> String {
-        // Buffer should be empty after flush; transcript is delivered via flush return value
-        String::new()
-    }
-
     /// Get accumulated audio buffer length in seconds.
     pub fn buffer_duration_secs(&self) -> f32 {
         self.audio_buffer.len() as f32 / 16000.0
@@ -195,7 +185,6 @@ mod tests {
     #[test]
     fn test_session_feed_returns_empty() {
         let mut session = TranscribeSession {
-            config: TranscribeConfig::default(),
             audio_buffer: Vec::new(),
         };
         let segments = session.feed_samples(&[0.0; 1600]);
@@ -206,7 +195,6 @@ mod tests {
     #[test]
     fn test_session_buffer_duration() {
         let mut session = TranscribeSession {
-            config: TranscribeConfig::default(),
             audio_buffer: Vec::new(),
         };
         assert_eq!(session.buffer_duration_secs(), 0.0);

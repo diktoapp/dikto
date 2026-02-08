@@ -49,7 +49,6 @@ impl TranscriptionCallback for PrintCallback {
                 *result = Some(Err(message.clone()));
                 self.completion.condvar.notify_all();
             }
-            RecordingState::Idle => eprintln!("[state] Idle"),
         }
     }
 }

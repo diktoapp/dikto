@@ -44,10 +44,6 @@ pub struct AudioCapture {
     _stream: cpal::Stream,
     consumer: HeapCons<f32>,
     running: Arc<AtomicBool>,
-    #[allow(dead_code)]
-    device_sample_rate: u32,
-    #[allow(dead_code)]
-    device_channels: u16,
 }
 
 impl AudioCapture {
@@ -97,8 +93,6 @@ impl AudioCapture {
             _stream: stream,
             consumer,
             running,
-            device_sample_rate,
-            device_channels,
         })
     }
 

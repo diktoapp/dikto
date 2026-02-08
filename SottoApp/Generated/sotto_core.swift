@@ -1516,7 +1516,6 @@ public func FfiConverterTypeSottoConfig_lower(_ value: SottoConfig) -> RustBuffe
 
 public enum RecordingState {
     
-    case idle
     case listening
     case processing
     case done(text: String
@@ -1540,16 +1539,14 @@ public struct FfiConverterTypeRecordingState: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .idle
+        case 1: return .listening
         
-        case 2: return .listening
+        case 2: return .processing
         
-        case 3: return .processing
-        
-        case 4: return .done(text: try FfiConverterString.read(from: &buf)
+        case 3: return .done(text: try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .error(message: try FfiConverterString.read(from: &buf)
+        case 4: return .error(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -1560,25 +1557,21 @@ public struct FfiConverterTypeRecordingState: FfiConverterRustBuffer {
         switch value {
         
         
-        case .idle:
+        case .listening:
             writeInt(&buf, Int32(1))
         
         
-        case .listening:
+        case .processing:
             writeInt(&buf, Int32(2))
         
         
-        case .processing:
-            writeInt(&buf, Int32(3))
-        
-        
         case let .done(text):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(text, into: &buf)
             
         
         case let .error(message):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(message, into: &buf)
             
         }
