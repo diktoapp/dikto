@@ -80,8 +80,7 @@ pub async fn run_setup(model_name: Option<&str>) -> anyhow::Result<()> {
     }
 
     eprintln!("\nSetup complete! You can now use sotto.");
-    eprintln!("  MCP mode: sotto --mcp");
-    eprintln!("  CLI test: cargo run --example listen");
+    eprintln!("  Desktop app: open /Applications/Sotto.app");
 
     Ok(())
 }

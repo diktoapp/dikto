@@ -1,107 +1,62 @@
 # sotto
 
-[![npm version](https://img.shields.io/npm/v/sotto)](https://www.npmjs.com/package/sotto)
-[![license](https://img.shields.io/npm/l/sotto)](./LICENSE)
+Voice-to-text for macOS. A menu-bar app that records speech and transcribes it locally using NVIDIA Parakeet TDT. Everything runs on your machine — no cloud APIs.
 
-Voice input for Claude Code. Speak instead of typing.
+> **macOS 14+ only.** Apple Silicon recommended.
 
-A local, open-source MCP server that streams your voice to [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for real-time transcription and sends the text to Claude Code. Everything runs on your machine — no cloud APIs, no network calls.
+## Architecture
 
-> **macOS only.** Sotto uses `osascript` and the Cocoa framework for its floating status indicator. Linux and Windows are not supported.
-
-## How It Works
-
-```
-You speak → sotto streams audio to whisper-stream for live transcription
-→ a floating indicator shows status and live text
-→ silence detected or you click stop → text returned to Claude
-→ Claude treats it as your message and responds
-```
+- **Rust core** (`sotto-core`) — audio capture, VAD, ASR engine, model management
+- **Swift UI** (`SottoApp`) — SwiftUI menu-bar app with recording overlay
+- **CLI** (`sotto-cli`) — headless model setup
 
 ## Prerequisites
 
-- **macOS** (Apple Silicon recommended, Intel works too)
-- **Node.js** >= 18
-- **whisper-cpp** — local speech-to-text with live streaming
+- macOS 14+ (Sonoma or later)
+- [Rust toolchain](https://rustup.rs/) (1.75+)
+- cmake (`brew install cmake`)
 
-Install system dependencies:
-
-```bash
-brew install whisper-cpp
-```
-
-## Installation
+## Install
 
 ```bash
-npm install -g sotto
-sotto-setup
+# Build the CLI and download a model
+cargo build --release --bin sotto
+./target/release/sotto --setup
+
+# Build the app
+make build-app
 ```
 
-The setup command will:
-1. Verify `whisper-stream` is installed (ships with whisper-cpp)
-2. Download the Whisper Base English model (~150MB) to `~/.local/share/sotto/models/`
-3. Create a default config at `~/.config/sotto/config.json`
-
-Then register with Claude Code:
-
-```bash
-# Available in all projects (recommended for most users)
-claude mcp add sotto -s user -- sotto
-
-# Or, available only in the current project
-claude mcp add sotto -s local -- sotto
-```
-
-Use **user** scope if you want voice input everywhere. Use **local** scope if you only want sotto in a specific project.
-
-On first use, macOS will prompt you to grant microphone access to your terminal app (Terminal, iTerm2, etc.) in **System Settings > Privacy & Security > Microphone**.
+The setup command downloads the default model (~2.5 GB) to `~/.local/share/sotto/models/` and creates a config at `~/.config/sotto/config.json`.
 
 ## Usage
 
-In Claude Code, type:
-
-```
-/sotto:listen
+```bash
+open build/Sotto.app
 ```
 
-A floating indicator appears at the bottom of your screen showing:
-- Recording status (listening / transcribing)
-- Live transcription text as you speak
-- A stop button to end recording early
+Press **Option+R** to start recording. Speech is transcribed when you stop or silence is detected. The transcribed text is copied to your clipboard.
 
-Recording stops automatically after silence is detected, or when you click the stop button. Your speech is transcribed and sent to Claude as text.
+On first use, macOS will prompt you to grant microphone access in **System Settings > Privacy & Security > Microphone**.
 
-## Configuration
+## Models
 
-Edit `~/.config/sotto/config.json`:
+| Model | Size | Description |
+|---|---|---|
+| `parakeet-tdt-0.6b-v2` (default) | 2.5 GB | NVIDIA Parakeet TDT — high accuracy English (1.69% WER) |
+| `parakeet-tdt-0.6b-v3` | 2.6 GB | NVIDIA Parakeet TDT — 25 EU languages |
+| `whisper-tiny` | 75 MB | Whisper Tiny — fast, 99 languages |
+| `whisper-small` | 460 MB | Whisper Small — balanced accuracy & speed |
+| `whisper-large-v3-turbo` | 1.6 GB | Whisper Large v3 Turbo — highest accuracy |
+| `distil-whisper-large-v3` | 1.5 GB | Distil-Whisper — 6x faster Whisper |
 
-| Setting | Default | Env Var | Description |
-|---|---|---|---|
-| `modelPath` | `~/.local/share/sotto/models/ggml-base.en.bin` | `WHISPER_MODEL_PATH` | Path to GGML model |
-| `language` | `en` | `WHISPER_LANGUAGE` | Language code |
-| `maxDuration` | `30` | `WHISPER_MAX_DURATION` | Max recording seconds |
-
-Environment variables take precedence over the config file.
-
-## Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| "whisper-stream is not installed" | `brew install whisper-cpp` |
-| "Model not found" | Run `sotto-setup` |
-| "Microphone access denied" | Grant mic access to your terminal in System Settings > Privacy & Security > Microphone |
-| No speech detected | Make sure your microphone is working and you're speaking loudly enough |
-| Transcription is slow | The base model is ~3s for a 5s clip on Apple Silicon. Try the tiny model for faster results. |
-
-## Development
+To use a different model:
 
 ```bash
-git clone https://github.com/sourabhbgp/sotto.git
-cd sotto
-npm install
-npm run build
-npm test
+sotto --setup --model whisper-small
 ```
+
+Then select it in the app's Settings.
 
 ## License
 

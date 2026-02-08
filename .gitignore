@@ -1,8 +1,7 @@
-node_modules/
-dist/
-*.tsbuildinfo
 .DS_Store
-temp/
 target/
 build/
-whisper-cpp
+*.dSYM
+.build/
+temp/
+SottoApp/Generated/
