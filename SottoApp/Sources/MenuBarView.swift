@@ -38,8 +38,10 @@ struct MenuBarView: View {
                 Text("Sotto")
                     .fontWeight(.bold)
                 Spacer()
-                Text(statusText)
-                    .foregroundStyle(.secondary)
+                if !statusText.isEmpty {
+                    Text(statusText)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -120,7 +122,7 @@ struct MenuBarView: View {
         .padding(6)
         .frame(width: 280)
         .onAppear {
-            appState.accessibilityGranted = AXIsProcessTrusted()
+            appState.accessibilityGranted = probeAccessibilityPermission()
         }
     }
 
@@ -145,6 +147,6 @@ struct MenuBarView: View {
         if !appState.modelAvailable {
             return "No model downloaded"
         }
-        return "Ready"
+        return ""
     }
 }

@@ -5,7 +5,7 @@ import SwiftUI
 struct PermissionsSettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var micStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-    @State private var axGranted: Bool = AXIsProcessTrusted()
+    @State private var axGranted: Bool = probeAccessibilityPermission()
     @State private var axTimer: Timer?
 
     var body: some View {
@@ -166,7 +166,7 @@ struct PermissionsSettingsView: View {
     }
 
     private func refreshAxStatus() {
-        let granted = AXIsProcessTrusted()
+        let granted = probeAccessibilityPermission()
         axGranted = granted
         appState.accessibilityGranted = granted
     }

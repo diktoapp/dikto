@@ -70,6 +70,36 @@ func parseCarbonHotKey(from shortcut: String) -> CarbonHotKey? {
     return CarbonHotKey(keyCode: UInt32(keyCode), modifiers: modifiers)
 }
 
+// MARK: - Accessibility Probe
+
+/// Probe whether Accessibility permission is *actually* working right now.
+///
+/// `AXIsProcessTrusted()` caches its result for the process lifetime, so if the
+/// user *removes* the app from the Accessibility list (vs toggling it off), the
+/// cache returns stale `true`. We use the cached value as a fast first check
+/// (it's always correct when it says `false`), then verify with a real AX call
+/// only when the cache claims `true`.
+func probeAccessibilityPermission() -> Bool {
+    // Fast path: AXIsProcessTrusted() is reliable when it returns false.
+    guard AXIsProcessTrusted() else { return false }
+
+    // Cache says true — verify with a real AX call to catch stale entries.
+    // When the TCC entry is *removed*, the cache is stale and the AX call
+    // returns .apiDisabled or .cannotComplete.
+    let systemWide = AXUIElementCreateSystemWide()
+    var value: AnyObject?
+    let result = AXUIElementCopyAttributeValue(
+        systemWide,
+        kAXFocusedApplicationAttribute as CFString,
+        &value
+    )
+    if result == .apiDisabled || result == .cannotComplete {
+        return false
+    }
+    // .success, .noValue (no focused app), etc. — AX is working.
+    return true
+}
+
 /// Callback that bridges UniFFI transcription events to AppState.
 final class AppCallback: TranscriptionCallback, @unchecked Sendable {
     private weak var appState: AppState?
@@ -192,7 +222,7 @@ final class AppState: ObservableObject {
     init() {
         loadEngine()
         setupGlobalShortcut()
-        accessibilityGranted = AXIsProcessTrusted()
+        accessibilityGranted = probeAccessibilityPermission()
     }
 
     private func setupGlobalShortcut() {
@@ -392,7 +422,7 @@ final class AppState: ObservableObject {
         startingRecording = true
 
         let micOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        let axOK = AXIsProcessTrusted()
+        let axOK = probeAccessibilityPermission()
         accessibilityGranted = axOK
 
         if micOK && axOK {
@@ -459,14 +489,30 @@ final class AppState: ObservableObject {
         }
 
         if wantPaste {
-            accessibilityGranted = AXIsProcessTrusted()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.simulatePaste()
+            let axOK = probeAccessibilityPermission()
+            accessibilityGranted = axOK
+            if axOK {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.simulatePaste()
+                }
+            } else {
+                lastError = "Accessibility permission lost — text copied to clipboard. Re-grant in Settings."
+                selectedSettingsTab = .permissions
+                SettingsWindowController.shared.show(appState: self)
             }
         }
     }
 
     private func simulatePaste() {
+        guard probeAccessibilityPermission() else {
+            accessibilityGranted = false
+            if lastError == nil {
+                lastError = "Accessibility permission lost — text copied to clipboard. Re-grant in Settings."
+            }
+            selectedSettingsTab = .permissions
+            SettingsWindowController.shared.show(appState: self)
+            return
+        }
         let src = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true) // 'v'
         let keyUp = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false)
