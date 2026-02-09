@@ -471,7 +471,9 @@ final class AppState: ObservableObject {
     func stopRecording() {
         sessionHandle?.stop()
         sessionHandle = nil
-        activeCallback = nil
+        // activeCallback is NOT nilled here — it must stay alive
+        // so the Rust thread's .done/.error callbacks can reach AppState.
+        // It gets replaced naturally on the next proceedWithRecording() call.
     }
 
     func updateOverlay() {
