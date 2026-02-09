@@ -322,16 +322,20 @@ mod tests {
 
     #[test]
     fn test_validate_resets_invalid_shortcut() {
-        let mut config = DiktoConfig::default();
-        config.global_shortcut = Some("just-a-key".to_string());
+        let mut config = DiktoConfig {
+            global_shortcut: Some("just-a-key".to_string()),
+            ..DiktoConfig::default()
+        };
         config.validate();
         assert_eq!(config.global_shortcut, Some("option+r".to_string()));
     }
 
     #[test]
     fn test_validate_resets_none_shortcut() {
-        let mut config = DiktoConfig::default();
-        config.global_shortcut = None;
+        let mut config = DiktoConfig {
+            global_shortcut: None,
+            ..DiktoConfig::default()
+        };
         config.validate();
         assert_eq!(config.global_shortcut, Some("option+r".to_string()));
     }
@@ -355,10 +359,10 @@ mod tests {
 
     #[test]
     fn test_validate_language_code() {
-        let mut config = DiktoConfig::default();
-
-        // Valid codes should be kept
-        config.language = "fr".to_string();
+        let mut config = DiktoConfig {
+            language: "fr".to_string(),
+            ..DiktoConfig::default()
+        };
         config.validate();
         assert_eq!(config.language, "fr");
 

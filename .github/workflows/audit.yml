@@ -12,18 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
       - name: Run cargo audit
-        run: cargo audit
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run cargo deny
-        run: cargo deny check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
         continue-on-error: true  # Advisory-only until deny.toml is tuned
