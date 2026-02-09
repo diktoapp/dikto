@@ -129,12 +129,12 @@ pub struct SessionHandle {
 impl SessionHandle {
     /// Stop the recording session.
     pub fn stop(&self) {
-        self.stop_flag.store(true, Ordering::Relaxed);
+        self.stop_flag.store(true, Ordering::Release);
     }
 
     /// Check if the session is still active.
     pub fn is_active(&self) -> bool {
-        !self.stop_flag.load(Ordering::Relaxed)
+        !self.stop_flag.load(Ordering::Acquire)
     }
 }
 
@@ -203,11 +203,12 @@ impl DiktoEngine {
     /// Explicitly load the configured model into RAM.
     /// Optional — start_listening() will lazy-load if needed.
     pub fn load_model(&self) -> Result<(), DiktoError> {
-        let inner = self.inner.lock()
+        let inner = self
+            .inner
+            .lock()
             .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
         let model_name = inner.config.model_name.clone();
-        let model_info =
-            models::find_model(&model_name).ok_or(DiktoError::NoModel)?;
+        let model_info = models::find_model(&model_name).ok_or(DiktoError::NoModel)?;
         let path = models::model_path(&model_name).ok_or(DiktoError::NoModel)?;
 
         if !models::is_model_downloaded(&model_name) {
@@ -215,7 +216,9 @@ impl DiktoEngine {
         }
 
         let asr = AsrEngine::load(model_info.backend, &path)?;
-        *inner.engine.lock()
+        *inner
+            .engine
+            .lock()
             .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))? = Some(LoadedEngine {
             model_name: model_name.clone(),
             engine: asr,
@@ -227,7 +230,10 @@ impl DiktoEngine {
     /// Unload the current model from RAM, freeing memory.
     pub fn unload_model(&self) {
         let Ok(inner) = self.inner.lock() else { return };
-        let was_loaded = inner.engine.lock().ok()
+        let was_loaded = inner
+            .engine
+            .lock()
+            .ok()
             .and_then(|mut g| g.take())
             .is_some();
         if was_loaded {
@@ -238,10 +244,12 @@ impl DiktoEngine {
     /// Switch to a different model. Unloads the current model from RAM.
     /// The new model will be loaded lazily on next recording.
     pub fn switch_model(&self, model_name: String) -> Result<(), DiktoError> {
-        let mut inner = self.inner.lock()
+        let mut inner = self
+            .inner
+            .lock()
             .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
 
-        if inner.recording.load(Ordering::Relaxed) {
+        if inner.recording.load(Ordering::Acquire) {
             return Err(DiktoError::AlreadyRecording);
         }
 
@@ -259,7 +267,10 @@ impl DiktoEngine {
         // Save new model choice
         inner.config.model_name = model_name.clone();
         config::save_config(&inner.config).map_err(|e| DiktoError::Config(e.to_string()))?;
-        info!("Switched to model '{}' (will load on next recording)", model_name);
+        info!(
+            "Switched to model '{}' (will load on next recording)",
+            model_name
+        );
         Ok(())
     }
 
@@ -271,17 +282,18 @@ impl DiktoEngine {
         listen_config: ListenConfig,
         callback: Arc<dyn TranscriptionCallback>,
     ) -> Result<Arc<SessionHandle>, DiktoError> {
-        let inner = self.inner.lock()
+        let inner = self
+            .inner
+            .lock()
             .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
 
-        if inner.recording.load(Ordering::Relaxed) {
+        if inner.recording.load(Ordering::Acquire) {
             return Err(DiktoError::AlreadyRecording);
         }
 
         // Verify model is available on disk
         let model_name = inner.config.model_name.clone();
-        let model_info =
-            models::find_model(&model_name).ok_or(DiktoError::NoModel)?;
+        let model_info = models::find_model(&model_name).ok_or(DiktoError::NoModel)?;
         if !models::is_model_downloaded(&model_name) {
             return Err(DiktoError::NoModel);
         }
@@ -296,7 +308,7 @@ impl DiktoEngine {
         });
 
         let recording = inner.recording.clone();
-        recording.store(true, Ordering::Relaxed);
+        recording.store(true, Ordering::Release);
 
         let max_duration = listen_config.max_duration;
         let silence_duration_ms = listen_config.silence_duration_ms;
@@ -309,7 +321,8 @@ impl DiktoEngine {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 // Lazy-load model if needed
                 let needs_load = {
-                    let guard = engine_holder.lock()
+                    let guard = engine_holder
+                        .lock()
                         .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
                     !matches!(&*guard, Some(loaded) if loaded.model_name == model_name)
                 };
@@ -321,7 +334,8 @@ impl DiktoEngine {
 
                     match AsrEngine::load(backend, &model_path) {
                         Ok(asr) => {
-                            let mut guard = engine_holder.lock()
+                            let mut guard = engine_holder
+                                .lock()
                                 .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
                             *guard = Some(LoadedEngine {
                                 model_name: model_name.clone(),
@@ -330,7 +344,7 @@ impl DiktoEngine {
                             debug!("Model '{}' loaded into RAM", model_name);
                         }
                         Err(e) => {
-                            recording.store(false, Ordering::Relaxed);
+                            recording.store(false, Ordering::Release);
                             callback.on_state_change(RecordingState::Error {
                                 message: format!("Failed to load model: {e}"),
                             });
@@ -342,7 +356,8 @@ impl DiktoEngine {
                 // Create transcription session
                 let transcribe_config = TranscribeConfig { language };
                 let session = {
-                    let guard = engine_holder.lock()
+                    let guard = engine_holder
+                        .lock()
                         .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
                     let loaded = guard.as_ref().ok_or(DiktoError::NoModel)?;
                     loaded.engine.create_session(transcribe_config)
@@ -358,14 +373,12 @@ impl DiktoEngine {
                     speech_threshold,
                 );
 
-                recording.store(false, Ordering::Relaxed);
+                recording.store(false, Ordering::Release);
 
                 match &result {
                     Ok(text) => {
                         debug!("pipeline done, text_len={}", text.len());
-                        callback.on_state_change(RecordingState::Done {
-                            text: text.clone(),
-                        });
+                        callback.on_state_change(RecordingState::Done { text: text.clone() });
                     }
                     Err(e) => {
                         warn!("pipeline error: {e}");
@@ -379,7 +392,7 @@ impl DiktoEngine {
             }));
 
             if let Err(_panic) = result {
-                recording.store(false, Ordering::Relaxed);
+                recording.store(false, Ordering::Release);
                 callback.on_state_change(RecordingState::Error {
                     message: "Internal error (thread panic)".to_string(),
                 });
@@ -391,14 +404,20 @@ impl DiktoEngine {
 
     /// Get a copy of the current config.
     pub fn get_config(&self) -> DiktoConfig {
-        self.inner.lock().ok()
-            .map(|g| g.config.clone())
-            .unwrap_or_default()
+        match self.inner.lock() {
+            Ok(g) => g.config.clone(),
+            Err(e) => {
+                warn!("get_config: lock poisoned ({e}), returning defaults");
+                DiktoConfig::default()
+            }
+        }
     }
 
     /// Update config and save.
     pub fn update_config(&self, config: DiktoConfig) -> Result<(), DiktoError> {
-        let mut inner = self.inner.lock()
+        let mut inner = self
+            .inner
+            .lock()
             .map_err(|e| DiktoError::Config(format!("Lock poisoned: {e}")))?;
         config::save_config(&config).map_err(|e| DiktoError::Config(e.to_string()))?;
         inner.config = config;
@@ -429,9 +448,8 @@ impl DiktoEngine {
         callback: Arc<dyn DownloadProgressCallback>,
     ) -> Result<(), DiktoError> {
         // Verify model exists
-        let _ = models::find_model(&model_name).ok_or_else(|| {
-            DiktoError::Model(format!("Unknown model: {model_name}"))
-        })?;
+        let _ = models::find_model(&model_name)
+            .ok_or_else(|| DiktoError::Model(format!("Unknown model: {model_name}")))?;
 
         let name = model_name.clone();
         std::thread::spawn(move || {
@@ -491,22 +509,32 @@ impl DiktoEngine {
     /// Check if the configured model's files are downloaded (available on disk).
     /// This does NOT mean the model is loaded into RAM.
     pub fn is_model_available(&self) -> bool {
-        let Ok(inner) = self.inner.lock() else { return false };
+        let Ok(inner) = self.inner.lock() else {
+            return false;
+        };
         models::is_model_downloaded(&inner.config.model_name)
     }
 
     /// Check if a model is currently loaded in RAM.
     pub fn is_model_loaded(&self) -> bool {
-        let Ok(inner) = self.inner.lock() else { return false };
-        let Ok(engine_guard) = inner.engine.lock() else { return false };
+        let Ok(inner) = self.inner.lock() else {
+            return false;
+        };
+        let Ok(engine_guard) = inner.engine.lock() else {
+            return false;
+        };
         engine_guard.is_some()
     }
 
     /// Check if currently recording.
     pub fn is_recording(&self) -> bool {
-        self.inner.lock().ok()
-            .map(|g| g.recording.load(Ordering::Relaxed))
-            .unwrap_or(false)
+        match self.inner.lock() {
+            Ok(g) => g.recording.load(Ordering::Acquire),
+            Err(e) => {
+                warn!("is_recording: lock poisoned ({e}), returning false");
+                false
+            }
+        }
     }
 
     /// Get the models directory path (for debugging).
@@ -552,7 +580,7 @@ fn run_pipeline(
 
     loop {
         // Check stop conditions
-        if stop_flag.load(Ordering::Relaxed) {
+        if stop_flag.load(Ordering::Acquire) {
             info!("Stop requested");
             break;
         }
@@ -577,7 +605,10 @@ fn run_pipeline(
             match vad.process_chunk(&chunk)? {
                 VadEvent::SpeechStart => {
                     speech_detected = true;
-                    debug!("Speech detected, feeding {} pre-speech samples", pre_speech_buffer.len());
+                    debug!(
+                        "Speech detected, feeding {} pre-speech samples",
+                        pre_speech_buffer.len()
+                    );
                     // Feed buffered pre-speech audio so transcription captures the start
                     if !pre_speech_buffer.is_empty() {
                         session.feed_samples(&pre_speech_buffer);
@@ -617,7 +648,7 @@ fn run_pipeline(
             // Send "Recording..." status to overlay (throttled)
             if last_partial_time.elapsed() >= std::time::Duration::from_millis(500) {
                 let duration = session.buffer_duration_secs();
-                callback.on_partial(format!("Recording... ({:.1}s)", duration));
+                callback.on_partial(format!("Recording... ({duration:.1}s)"));
                 last_partial_time = std::time::Instant::now();
             }
         } else {

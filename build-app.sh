@@ -39,6 +39,7 @@ SWIFT_FILES=(
     "$GENERATED/dikto_core.swift"
     "$SOURCES/DiktoApp.swift"
     "$SOURCES/AppState.swift"
+    "$SOURCES/KeyCodes.swift"
     "$SOURCES/MenuBarView.swift"
     "$SOURCES/PermissionView.swift"
     "$SOURCES/RecordingOverlay.swift"
@@ -72,25 +73,63 @@ swiftc \
     -o "$MACOS_DIR/DiktoApp" \
     "${SWIFT_FILES[@]}"
 
-# Remove extended attributes
-xattr -cr "$APP_DIR"
+# Parse --release flag
+RELEASE_BUILD=false
+for arg in "$@"; do
+    if [ "$arg" = "--release" ]; then
+        RELEASE_BUILD=true
+    fi
+done
 
 # Try to find a stable signing identity (keeps CDHash consistent across rebuilds,
 # so accessibility permissions don't go stale)
 IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
-    | { grep "Apple Development" || true; } | head -1 | awk -F'"' '{print $2}')
+    | { grep "Developer ID Application" || true; } | head -1 | awk -F'"' '{print $2}')
 
 if [ -z "$IDENTITY" ]; then
+    # Fall back to Apple Development identity
+    IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+        | { grep "Apple Development" || true; } | head -1 | awk -F'"' '{print $2}')
+fi
+
+if [ -z "$IDENTITY" ]; then
+    if [ "$RELEASE_BUILD" = true ]; then
+        echo "ERROR: --release build requires a valid Developer ID signing identity"
+        echo "No valid signing identity found. Install a Developer ID certificate first."
+        exit 1
+    fi
     IDENTITY="-"   # ad-hoc fallback
-    echo "No developer identity found, using ad-hoc signing"
+    echo "WARNING: No developer identity found, using ad-hoc signing"
+    echo "  This is fine for development but NOT suitable for distribution."
+    echo "  Use --release flag to enforce proper signing."
 else
     echo "Signing with: $IDENTITY"
 fi
 
+# Remove extended attributes (must be immediately before codesign to avoid
+# macOS re-adding provenance/FinderInfo attrs after compilation)
+xattr -cr "$APP_DIR"
+
 codesign --force --sign "$IDENTITY" \
     --options runtime \
+    --timestamp \
+    --deep \
     --entitlements "$ROOT/DiktoApp/DiktoApp.entitlements" \
     "$APP_DIR"
+
+# Strip any xattrs macOS may have re-added between sign and verify
+xattr -cr "$APP_DIR"
+
+# Verify the signature
+echo "Verifying signature..."
+if codesign --verify --deep --strict "$APP_DIR" 2>&1; then
+    echo "Signature verified successfully"
+else
+    echo "WARNING: Signature verification failed"
+    if [ "$RELEASE_BUILD" = true ]; then
+        exit 1
+    fi
+fi
 
 echo "Created: $APP_DIR"
 echo "Run with: open $APP_DIR"

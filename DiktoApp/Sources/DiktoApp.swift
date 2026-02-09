@@ -4,7 +4,7 @@ import SwiftUI
 /// without switching desktops. Uses NSWindow directly instead of SwiftUI's
 /// Settings scene to avoid the activation policy change that causes Space switching.
 @MainActor
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
     private var window: NSWindow?
     private var hostingView: NSHostingView<AnyView>?
@@ -32,6 +32,7 @@ final class SettingsWindowController {
         window.contentView = hosting
         window.title = "Dikto Settings"
         window.isReleasedWhenClosed = false
+        window.delegate = self
         // This is the key: moveToActiveSpace prevents Space switching
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
@@ -41,6 +42,13 @@ final class SettingsWindowController {
 
         self.window = window
         self.hostingView = hosting
+    }
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            self.window = nil
+            self.hostingView = nil
+        }
     }
 }
 

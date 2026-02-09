@@ -8,13 +8,15 @@ pub async fn run_setup(model_name: Option<&str>) -> anyhow::Result<()> {
     eprintln!("===========\n");
 
     // Ensure directories exist
-    let config_dir = config::config_dir();
+    let config_dir = config::config_dir()
+        .map_err(|e| anyhow::anyhow!("Cannot determine config directory: {e}"))?;
     let models_dir = config::models_dir();
     std::fs::create_dir_all(&config_dir)?;
     std::fs::create_dir_all(&models_dir)?;
 
     // Create default config if it doesn't exist
-    let config_path = config::config_path();
+    let config_path =
+        config::config_path().map_err(|e| anyhow::anyhow!("Cannot determine config path: {e}"))?;
     if !config_path.exists() {
         let cfg = DiktoConfig::default();
         config::save_config(&cfg)?;
@@ -33,13 +35,14 @@ pub async fn run_setup(model_name: Option<&str>) -> anyhow::Result<()> {
             eprintln!("Unknown model: '{model_name}'\n");
             eprintln!("Available models:");
             for (m, downloaded) in models::list_models() {
-                let status = if downloaded { "downloaded" } else { "not downloaded" };
+                let status = if downloaded {
+                    "downloaded"
+                } else {
+                    "not downloaded"
+                };
                 eprintln!(
                     "  {:<30} {:>8} MB  ({})  [{}]",
-                    m.name,
-                    m.size_mb,
-                    m.description,
-                    status
+                    m.name, m.size_mb, m.description, status
                 );
             }
             anyhow::bail!("Invalid model name: {model_name}");
@@ -57,7 +60,11 @@ pub async fn run_setup(model_name: Option<&str>) -> anyhow::Result<()> {
             if model.files.len() == 1 { "" } else { "s" }
         );
 
-        let total_bytes: u64 = model.files.iter().map(|f| f.size_mb as u64 * 1024 * 1024).sum();
+        let total_bytes: u64 = model
+            .files
+            .iter()
+            .map(|f| f.size_mb as u64 * 1024 * 1024)
+            .sum();
         let bar = indicatif::ProgressBar::new(total_bytes);
         bar.set_style(
             indicatif::ProgressStyle::default_bar()

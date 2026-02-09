@@ -63,6 +63,7 @@ struct RecordingOverlayView: View {
                 .fill(isProcessing ? Color.orange : Color.red)
                 .frame(width: 12, height: 12)
                 .shadow(color: isProcessing ? .orange : .red, radius: 4)
+                .accessibilityLabel(isProcessing ? "Processing indicator" : "Recording indicator")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(isProcessing ? "Processing..." : "Listening...")
@@ -72,10 +73,12 @@ struct RecordingOverlayView: View {
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .truncationMode(.head)
+                    .accessibilityValue(text.isEmpty ? "Waiting for speech" : text)
             }
 
             Spacer()
         }
+        .accessibilityElement(children: .combine)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(width: 420, height: 60)

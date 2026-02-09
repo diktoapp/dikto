@@ -3,7 +3,12 @@ mod setup;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "dikto", version, about = "Voice-to-text for macOS", arg_required_else_help = true)]
+#[command(
+    name = "dikto",
+    version,
+    about = "Voice-to-text for macOS",
+    arg_required_else_help = true
+)]
 struct Cli {
     /// Download model and create default config
     #[arg(long)]

@@ -28,5 +28,7 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dikto needs microphone access to transcribe your speech to text.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Dikto needs Accessibility permission to automatically paste transcribed text into your active application.</string>
 </dict>
 </plist>

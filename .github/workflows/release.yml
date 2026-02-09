@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: Build app
+        run: make build-app
+
+      - name: Create DMG
+        run: ./package-dmg.sh
+
+      # TODO: Add notarization step when Apple Developer credentials are available
+      # - name: Notarize
+      #   env:
+      #     DIKTO_NOTARIZE_PROFILE: dikto-notarize
+      #   run: ./notarize.sh --dmg
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/Dikto-${{ steps.version.outputs.version }}.dmg
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -5,3 +5,16 @@ build/
 .build/
 temp/
 DiktoApp/Generated/
+
+# Editor/IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+xcuserdata/
+.swiftpm/
+
+# Environment
+.env
+.env.*

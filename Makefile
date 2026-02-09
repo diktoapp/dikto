@@ -8,7 +8,7 @@ HEADER_FILE  = $(BINDINGS_DIR)/dikto_coreFFI.h
 MODULE_MAP   = $(BINDINGS_DIR)/dikto_coreFFI.modulemap
 UDLLIB       = target/release/libdikto_core.dylib
 
-.PHONY: all build-rust generate-bindings build-app clean test clippy
+.PHONY: all build-rust generate-bindings build-app clean test clippy package release
 
 all: build-rust generate-bindings build-app
 
@@ -36,6 +36,14 @@ test:
 ## Run clippy lints
 clippy:
 	$(CARGO) clippy --workspace -- -D warnings
+
+## Create distributable DMG
+package: build-app
+	./package-dmg.sh
+
+## Build release (enforces proper signing)
+release: build-rust generate-bindings
+	./build-app.sh --release
 
 ## Clean all build artifacts
 clean:

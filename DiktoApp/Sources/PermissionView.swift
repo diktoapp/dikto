@@ -153,8 +153,12 @@ struct PermissionsSettingsView: View {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
         proc.arguments = ["reset", "Accessibility", bundleID]
-        try? proc.run()
-        proc.waitUntilExit()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            NSLog("[Dikto] Failed to reset TCC: \(error)")
+        }
 
         // Show the system accessibility prompt
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary

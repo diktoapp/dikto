@@ -14,6 +14,9 @@ pub enum AsrEngine {
     Whisper(WhisperEngine),
 }
 
+// SAFETY: AsrEngine wraps ParakeetEngine and WhisperEngine, both of which use
+// internal C/C++ state. All access to AsrEngine is guarded by a Mutex<Option<LoadedEngine>>
+// in DiktoEngineInner, ensuring exclusive access from a single thread at a time.
 unsafe impl Send for AsrEngine {}
 unsafe impl Sync for AsrEngine {}
 
@@ -21,7 +24,9 @@ impl AsrEngine {
     /// Load a model based on backend type.
     pub fn load(backend: ModelBackend, model_dir: &Path) -> Result<Self, TranscribeError> {
         match backend {
-            ModelBackend::Parakeet => Ok(AsrEngine::Parakeet(Box::new(ParakeetEngine::load(model_dir)?))),
+            ModelBackend::Parakeet => Ok(AsrEngine::Parakeet(Box::new(ParakeetEngine::load(
+                model_dir,
+            )?))),
             ModelBackend::Whisper => Ok(AsrEngine::Whisper(WhisperEngine::load(model_dir)?)),
         }
     }
@@ -85,9 +90,7 @@ impl AsrSession {
             .lock()
             .map_err(|e| TranscribeError::Inference(format!("Lock poisoned: {e}")))?;
 
-        let loaded = guard
-            .as_mut()
-            .ok_or(TranscribeError::NotLoaded)?;
+        let loaded = guard.as_mut().ok_or(TranscribeError::NotLoaded)?;
 
         debug!("flush: lock acquired, running inference...");
 

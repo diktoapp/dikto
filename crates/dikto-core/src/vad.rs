@@ -97,12 +97,11 @@ impl VadProcessor {
     /// Process a chunk of audio samples and return a VAD event.
     /// Input should be 512 samples at 16kHz (32ms).
     pub fn process_chunk(&mut self, samples: &[f32]) -> Result<VadEvent, VadError> {
-        let probability = self
-            .detector
-            .predict(samples.iter().copied());
+        let probability = self.detector.predict(samples.iter().copied());
 
         let is_speech = probability > self.config.speech_threshold;
-        let frame_duration_ms = (self.chunk_size as f32 / self.config.sample_rate as f32 * 1000.0) as u32;
+        let frame_duration_ms =
+            (self.chunk_size as f32 / self.config.sample_rate as f32 * 1000.0) as u32;
 
         let event = match (self.state, is_speech) {
             // Idle: wait for first speech frame to enter Pending
@@ -122,7 +121,10 @@ impl VadProcessor {
                     self.speech_frames = self.pending_speech_frames;
                     self.silence_frames = 0;
                     self.pending_speech_frames = 0;
-                    debug!("VAD: speech confirmed after {} frames (prob={probability:.3})", self.speech_frames);
+                    debug!(
+                        "VAD: speech confirmed after {} frames (prob={probability:.3})",
+                        self.speech_frames
+                    );
                     VadEvent::SpeechStart
                 } else {
                     VadEvent::Silence
@@ -130,7 +132,10 @@ impl VadProcessor {
             }
             (VadState::Pending, false) => {
                 // Not enough consecutive frames — false alarm
-                debug!("VAD: pending speech reset after {} frames", self.pending_speech_frames);
+                debug!(
+                    "VAD: pending speech reset after {} frames",
+                    self.pending_speech_frames
+                );
                 self.state = VadState::Idle;
                 self.pending_speech_frames = 0;
                 VadEvent::Silence

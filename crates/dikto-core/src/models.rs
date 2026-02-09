@@ -1,4 +1,5 @@
 use crate::config::models_dir;
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use thiserror::Error;
 use tracing::{info, warn};
@@ -28,6 +29,8 @@ pub struct ModelFile {
     pub filename: &'static str,
     pub url: &'static str,
     pub size_mb: u32,
+    /// Expected SHA-256 hash (hex, lowercase). Empty string means skip verification.
+    pub sha256: &'static str,
 }
 
 /// Model registry entry. A model is a directory containing multiple files.
@@ -52,21 +55,25 @@ pub const MODELS: &[ModelInfo] = &[
                 filename: "encoder-model.onnx",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx"),
                 size_mb: 42,
+                sha256: "",
             },
             ModelFile {
                 filename: "encoder-model.onnx.data",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/encoder-model.onnx.data"),
                 size_mb: 2440,
+                sha256: "",
             },
             ModelFile {
                 filename: "decoder_joint-model.onnx",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/decoder_joint-model.onnx"),
                 size_mb: 36,
+                sha256: "",
             },
             ModelFile {
                 filename: "vocab.txt",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/vocab.txt"),
                 size_mb: 1,
+                sha256: "",
             },
         ],
     },
@@ -80,21 +87,25 @@ pub const MODELS: &[ModelInfo] = &[
                 filename: "encoder-model.onnx",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/encoder-model.onnx"),
                 size_mb: 42,
+                sha256: "",
             },
             ModelFile {
                 filename: "encoder-model.onnx.data",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/encoder-model.onnx.data"),
                 size_mb: 2440,
+                sha256: "",
             },
             ModelFile {
                 filename: "decoder_joint-model.onnx",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/decoder_joint-model.onnx"),
                 size_mb: 73,
+                sha256: "",
             },
             ModelFile {
                 filename: "vocab.txt",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/vocab.txt"),
                 size_mb: 1,
+                sha256: "",
             },
         ],
     },
@@ -107,6 +118,7 @@ pub const MODELS: &[ModelInfo] = &[
             filename: "ggml-tiny.bin",
             url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
             size_mb: 75,
+            sha256: "",
         }],
     },
     ModelInfo {
@@ -118,6 +130,7 @@ pub const MODELS: &[ModelInfo] = &[
             filename: "ggml-small.bin",
             url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
             size_mb: 460,
+            sha256: "",
         }],
     },
     ModelInfo {
@@ -129,6 +142,7 @@ pub const MODELS: &[ModelInfo] = &[
             filename: "ggml-large-v3-turbo.bin",
             url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
             size_mb: 1600,
+            sha256: "",
         }],
     },
     ModelInfo {
@@ -140,6 +154,7 @@ pub const MODELS: &[ModelInfo] = &[
             filename: "ggml-distil-large-v3.bin",
             url: "https://huggingface.co/distil-whisper/distil-large-v3-ggml/resolve/main/ggml-distil-large-v3.bin",
             size_mb: 1520,
+            sha256: "",
         }],
     },
 ];
@@ -173,19 +188,12 @@ pub fn list_models() -> Vec<(ModelInfo, bool)> {
 
 /// Download a model with progress callback.
 /// `on_progress` receives (bytes_downloaded, total_bytes).
-pub async fn download_model<F>(
-    name: &str,
-    on_progress: F,
-) -> Result<PathBuf, ModelError>
+pub async fn download_model<F>(name: &str, on_progress: F) -> Result<PathBuf, ModelError>
 where
     F: Fn(u64, u64) + Send + 'static,
 {
     let model = find_model(name).ok_or_else(|| {
-        let available = MODELS
-            .iter()
-            .map(|m| m.name)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let available = MODELS.iter().map(|m| m.name).collect::<Vec<_>>().join(", ");
         ModelError::NotFound(name.to_string(), available)
     })?;
 
@@ -193,7 +201,11 @@ where
     std::fs::create_dir_all(&dir)?;
 
     // Calculate total size and already-downloaded bytes
-    let total_bytes: u64 = model.files.iter().map(|f| f.size_mb as u64 * 1024 * 1024).sum();
+    let total_bytes: u64 = model
+        .files
+        .iter()
+        .map(|f| f.size_mb as u64 * 1024 * 1024)
+        .sum();
     let mut cumulative_downloaded: u64 = 0;
 
     for file in model.files {
@@ -225,53 +237,99 @@ where
 
         let temp_dest = dir.join(format!("{}.downloading", file.filename));
 
-        use futures::StreamExt;
-        let mut stream = response.bytes_stream();
-        let mut out = tokio::fs::File::create(&temp_dest)
-            .await
-            .map_err(ModelError::Io)?;
+        // Use a closure to ensure temp file cleanup on any error
+        let download_result: Result<(), ModelError> = async {
+            use futures::StreamExt;
+            let mut stream = response.bytes_stream();
+            let mut out = tokio::fs::File::create(&temp_dest)
+                .await
+                .map_err(ModelError::Io)?;
 
-        use tokio::io::AsyncWriteExt;
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            out.write_all(&chunk).await.map_err(ModelError::Io)?;
-            cumulative_downloaded += chunk.len() as u64;
-            on_progress(cumulative_downloaded, total_bytes);
+            use tokio::io::AsyncWriteExt;
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                out.write_all(&chunk).await.map_err(ModelError::Io)?;
+                cumulative_downloaded += chunk.len() as u64;
+                on_progress(cumulative_downloaded, total_bytes);
+            }
+            out.flush().await.map_err(ModelError::Io)?;
+            drop(out);
+
+            // Verify SHA-256 hash if provided
+            if !file.sha256.is_empty() {
+                let temp_path = temp_dest.clone();
+                let expected_hash = file.sha256.to_string();
+                let hash_ok = tokio::task::spawn_blocking(move || {
+                    verify_file_sha256(&temp_path, &expected_hash)
+                })
+                .await
+                .map_err(|e| ModelError::DownloadFailed(format!("Hash task failed: {e}")))?;
+
+                if !hash_ok {
+                    return Err(ModelError::DownloadFailed(format!(
+                        "SHA-256 mismatch for {}",
+                        file.filename
+                    )));
+                }
+                info!("SHA-256 verified for {}", file.filename);
+            } else {
+                // Fallback: verify file size (within 10% of expected)
+                let actual_size = tokio::fs::metadata(&temp_dest)
+                    .await
+                    .map_err(ModelError::Io)?
+                    .len();
+                let expected_size = file.size_mb as u64 * 1024 * 1024;
+                let tolerance = expected_size / 10;
+                if actual_size < expected_size.saturating_sub(tolerance) {
+                    return Err(ModelError::DownloadFailed(format!(
+                        "Size mismatch for {}: expected ~{} MB, got {} bytes",
+                        file.filename, file.size_mb, actual_size
+                    )));
+                }
+            }
+
+            tokio::fs::rename(&temp_dest, &dest)
+                .await
+                .map_err(ModelError::Io)?;
+
+            Ok(())
         }
-        out.flush().await.map_err(ModelError::Io)?;
-        drop(out);
+        .await;
 
-        tokio::fs::rename(&temp_dest, &dest)
-            .await
-            .map_err(ModelError::Io)?;
-
-        // Verify downloaded file size (within 10% of expected)
-        let actual_size = tokio::fs::metadata(&dest).await.map_err(ModelError::Io)?.len();
-        let expected_size = file.size_mb as u64 * 1024 * 1024;
-        let tolerance = expected_size / 10; // 10%
-        if actual_size < expected_size.saturating_sub(tolerance) {
-            let _ = tokio::fs::remove_file(&dest).await;
-            return Err(ModelError::DownloadFailed(format!(
-                "Size mismatch for {}: expected ~{} MB, got {} bytes",
-                file.filename, file.size_mb, actual_size
-            )));
+        // Clean up temp file on any error
+        if let Err(e) = download_result {
+            let _ = tokio::fs::remove_file(&temp_dest).await;
+            return Err(e);
         }
 
         info!("Downloaded {}", file.filename);
     }
 
-    info!("All files for model '{}' downloaded to {}", name, dir.display());
+    info!(
+        "All files for model '{}' downloaded to {}",
+        name,
+        dir.display()
+    );
     Ok(dir)
+}
+
+/// Verify the SHA-256 hash of a file.
+fn verify_file_sha256(path: &std::path::Path, expected_hex: &str) -> bool {
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut hasher = Sha256::new();
+    if std::io::copy(&mut file, &mut hasher).is_err() {
+        return false;
+    }
+    let actual = format!("{:x}", hasher.finalize());
+    actual == expected_hex
 }
 
 /// Delete a downloaded model (removes the entire model directory).
 pub fn delete_model(name: &str) -> Result<(), ModelError> {
     let Some(_) = find_model(name) else {
-        let available = MODELS
-            .iter()
-            .map(|m| m.name)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let available = MODELS.iter().map(|m| m.name).collect::<Vec<_>>().join(", ");
         return Err(ModelError::NotFound(name.to_string(), available));
     };
 
@@ -314,5 +372,77 @@ mod tests {
     fn test_model_path_is_directory() {
         let path = model_path("parakeet-tdt-0.6b-v2").unwrap();
         assert!(path.to_string_lossy().ends_with("parakeet-tdt-0.6b-v2"));
+    }
+
+    #[test]
+    fn test_all_model_urls_are_https() {
+        for model in MODELS {
+            for file in model.files {
+                assert!(
+                    file.url.starts_with("https://"),
+                    "Model file {} in {} has non-HTTPS URL: {}",
+                    file.filename,
+                    model.name,
+                    file.url
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_model_size_estimates_reasonable() {
+        for model in MODELS {
+            assert!(model.size_mb > 0, "Model {} has zero size", model.name);
+            for file in model.files {
+                assert!(
+                    file.size_mb > 0,
+                    "File {} in {} has zero size",
+                    file.filename,
+                    model.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_sha256_hashes_valid_hex() {
+        for model in MODELS {
+            for file in model.files {
+                if !file.sha256.is_empty() {
+                    assert_eq!(
+                        file.sha256.len(),
+                        64,
+                        "SHA-256 for {} in {} is not 64 hex chars",
+                        file.filename,
+                        model.name
+                    );
+                    assert!(
+                        file.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                        "SHA-256 for {} in {} contains non-hex chars",
+                        file.filename,
+                        model.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_verify_file_sha256() {
+        use std::io::Write;
+        let tmp = std::env::temp_dir().join("dikto_sha256_test");
+        let mut f = std::fs::File::create(&tmp).unwrap();
+        f.write_all(b"hello world").unwrap();
+        drop(f);
+
+        // SHA-256 of "hello world"
+        let expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        assert!(verify_file_sha256(&tmp, expected));
+        assert!(!verify_file_sha256(
+            &tmp,
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ));
+
+        let _ = std::fs::remove_file(&tmp);
     }
 }

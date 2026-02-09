@@ -42,8 +42,9 @@ pub struct ParakeetEngine {
     model: ParakeetTDT,
 }
 
-// ParakeetTDT uses ort::Session internally which isn't Send/Sync by default.
-// Safety: we only access it from one thread at a time via Mutex.
+// SAFETY: ParakeetTDT uses ort::Session internally which isn't Send/Sync by default.
+// All access is guarded by the Mutex<Option<LoadedEngine>> in DiktoEngineInner,
+// ensuring only one thread accesses the ParakeetEngine at a time.
 unsafe impl Send for ParakeetEngine {}
 unsafe impl Sync for ParakeetEngine {}
 
@@ -82,37 +83,64 @@ pub struct WhisperEngine {
     ctx: WhisperContext,
 }
 
-// WhisperContext wraps a C pointer — we guard access via Mutex externally.
+// SAFETY: WhisperContext wraps a raw C pointer to the whisper.cpp context.
+// All access is guarded by the Mutex<Option<LoadedEngine>> in DiktoEngineInner,
+// ensuring only one thread accesses the WhisperEngine at a time.
 unsafe impl Send for WhisperEngine {}
 unsafe impl Sync for WhisperEngine {}
 
 impl WhisperEngine {
     /// Load a Whisper GGML model from a directory.
-    /// The directory must contain a single `.bin` file.
+    /// Looks for a known `.bin` filename from the model registry, falling back
+    /// to searching for any `.bin` file.
     pub fn load(model_dir: &Path) -> Result<Self, TranscribeError> {
+        Self::load_with_filename(model_dir, None)
+    }
+
+    /// Load a Whisper model, optionally specifying the expected filename.
+    pub fn load_with_filename(
+        model_dir: &Path,
+        expected_filename: Option<&str>,
+    ) -> Result<Self, TranscribeError> {
         info!("Loading Whisper model from {}", model_dir.display());
 
-        // Find the .bin file in the model directory
-        let bin_path = std::fs::read_dir(model_dir)
-            .map_err(|e| TranscribeError::ModelLoad(e.to_string()))?
-            .filter_map(|entry| entry.ok())
-            .find(|entry| {
-                entry
-                    .path()
-                    .extension()
-                    .map(|ext| ext == "bin")
-                    .unwrap_or(false)
-            })
-            .map(|entry| entry.path())
-            .ok_or_else(|| {
-                TranscribeError::ModelLoad("No .bin file found in model directory".to_string())
-            })?;
+        // Try the specific expected filename first
+        let bin_path = if let Some(filename) = expected_filename {
+            let path = model_dir.join(filename);
+            if path.exists() {
+                path
+            } else {
+                return Err(TranscribeError::ModelLoad(format!(
+                    "Expected model file '{}' not found in {}",
+                    filename,
+                    model_dir.display()
+                )));
+            }
+        } else {
+            // Fallback: search for known ggml-*.bin filenames
+            std::fs::read_dir(model_dir)
+                .map_err(|e| TranscribeError::ModelLoad(e.to_string()))?
+                .filter_map(|entry| entry.ok())
+                .find(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("ggml-") && name.ends_with(".bin")
+                })
+                .map(|entry| entry.path())
+                .ok_or_else(|| {
+                    TranscribeError::ModelLoad(
+                        "No ggml-*.bin file found in model directory".to_string(),
+                    )
+                })?
+        };
 
-        let ctx = WhisperContext::new_with_params(
-            bin_path.to_str().unwrap_or_default(),
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| TranscribeError::ModelLoad(format!("whisper init failed: {e}")))?;
+        let bin_path_str = bin_path
+            .to_str()
+            .ok_or_else(|| TranscribeError::ModelLoad("Invalid UTF-8 in model path".into()))?;
+
+        let ctx =
+            WhisperContext::new_with_params(bin_path_str, WhisperContextParameters::default())
+                .map_err(|e| TranscribeError::ModelLoad(format!("whisper init failed: {e}")))?;
 
         info!("Whisper model loaded successfully");
         Ok(Self { ctx })
@@ -147,9 +175,9 @@ impl WhisperEngine {
             .full(params, samples)
             .map_err(|e| TranscribeError::Inference(format!("whisper inference: {e}")))?;
 
-        let n_segments = state.full_n_segments().map_err(|e| {
-            TranscribeError::Inference(format!("get segments: {e}"))
-        })?;
+        let n_segments = state
+            .full_n_segments()
+            .map_err(|e| TranscribeError::Inference(format!("get segments: {e}")))?;
 
         let mut text = String::new();
         for i in 0..n_segments {

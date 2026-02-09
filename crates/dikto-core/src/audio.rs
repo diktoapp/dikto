@@ -63,7 +63,10 @@ impl AudioCapture {
 
         let device_sample_rate = supported_config.sample_rate().0;
         let device_channels = supported_config.channels();
-        info!("Device config: {device_sample_rate}Hz, {device_channels}ch, {:?}", supported_config.sample_format());
+        info!(
+            "Device config: {device_sample_rate}Hz, {device_channels}ch, {:?}",
+            supported_config.sample_format()
+        );
 
         let rb = HeapRb::<f32>::new(config.buffer_capacity);
         let (producer, consumer) = rb.split();
@@ -172,8 +175,8 @@ fn build_stream(
                             while (resample_pos as usize) < mono.len().saturating_sub(1) {
                                 let idx = resample_pos as usize;
                                 let frac = resample_pos - idx as f64;
-                                let sample = mono[idx] * (1.0 - frac as f32)
-                                    + mono[idx + 1] * frac as f32;
+                                let sample =
+                                    mono[idx] * (1.0 - frac as f32) + mono[idx + 1] * frac as f32;
                                 resampled.push(sample);
                                 resample_pos += ratio;
                             }
