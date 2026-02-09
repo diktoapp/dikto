@@ -1,10 +1,73 @@
 import AppKit
+import AVFoundation
 import Carbon
 import Foundation
 import SwiftUI
 
 extension Notification.Name {
     static let sottoHotKeyPressed = Notification.Name("sottoHotKeyPressed")
+    static let sottoHotKeyReleased = Notification.Name("sottoHotKeyReleased")
+}
+
+// MARK: - Carbon HotKey Helpers
+
+struct CarbonHotKey {
+    let keyCode: UInt32
+    let modifiers: UInt32
+}
+
+/// Map a key name (lowercase) to its Carbon virtual key code.
+func nameToKeyCode(_ name: String) -> UInt16? {
+    let map: [String: UInt16] = [
+        // Letters
+        "a": 0x00, "s": 0x01, "d": 0x02, "f": 0x03, "h": 0x04,
+        "g": 0x05, "z": 0x06, "x": 0x07, "c": 0x08, "v": 0x09,
+        "b": 0x0B, "q": 0x0C, "w": 0x0D, "e": 0x0E, "r": 0x0F,
+        "y": 0x10, "t": 0x11, "u": 0x20, "i": 0x22, "p": 0x23,
+        "l": 0x25, "j": 0x26, "k": 0x28, "n": 0x2D, "m": 0x2E,
+        "o": 0x1F,
+        // Numbers
+        "0": 0x1D, "1": 0x12, "2": 0x13, "3": 0x14, "4": 0x15,
+        "5": 0x17, "6": 0x16, "7": 0x1A, "8": 0x1C, "9": 0x19,
+        // Special keys
+        "space": 0x31, "return": 0x24, "tab": 0x30, "escape": 0x35,
+        "delete": 0x33, "forwarddelete": 0x75,
+        "leftarrow": 0x7B, "rightarrow": 0x7C,
+        "downarrow": 0x7D, "uparrow": 0x7E,
+        "home": 0x73, "end": 0x77, "pageup": 0x74, "pagedown": 0x79,
+        // Punctuation
+        "-": 0x1B, "=": 0x18, "[": 0x21, "]": 0x1E,
+        "\\": 0x2A, ";": 0x29, "'": 0x27, ",": 0x2B,
+        ".": 0x2F, "/": 0x2C, "`": 0x32,
+        // Function keys
+        "f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76,
+        "f5": 0x60, "f6": 0x61, "f7": 0x62, "f8": 0x64,
+        "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
+    ]
+    return map[name]
+}
+
+/// Parse a shortcut string like "option+r" into Carbon keyCode + modifiers.
+func parseCarbonHotKey(from shortcut: String) -> CarbonHotKey? {
+    let parts = shortcut.lowercased().split(separator: "+").map { String($0).trimmingCharacters(in: .whitespaces) }
+
+    var modifiers: UInt32 = 0
+    var keyName: String?
+
+    for part in parts {
+        switch part {
+        case "option": modifiers |= UInt32(optionKey)
+        case "command": modifiers |= UInt32(cmdKey)
+        case "control": modifiers |= UInt32(controlKey)
+        case "shift": modifiers |= UInt32(shiftKey)
+        default: keyName = part
+        }
+    }
+
+    guard let key = keyName, let keyCode = nameToKeyCode(key) else { return nil }
+    guard modifiers != 0 else { return nil }
+
+    return CarbonHotKey(keyCode: UInt32(keyCode), modifiers: modifiers)
 }
 
 /// Callback that bridges UniFFI transcription events to AppState.
@@ -112,26 +175,70 @@ final class AppState: ObservableObject {
     @Published var modelInMemory = false
     @Published var downloadProgress: [String: Double] = [:]
     @Published var availableLanguages: [LanguageInfo] = []
+    @Published var accessibilityGranted = false
+    @Published var selectedSettingsTab: SettingsTab = .general
     let overlayController = RecordingOverlayController()
     private var engine: SottoEngine?
     private var sessionHandle: SessionHandle?
     private var activeCallback: AppCallback?
     private var hotKeyRef: EventHotKeyRef?
+    private var pressedHandlerRef: EventHandlerRef?
+    private var releasedHandlerRef: EventHandlerRef?
     private var startingRecording = false
+    private var holdStartTime: Date?
+    private var currentShortcut: String?
+    private var currentMode: ActivationMode = .hold
 
     init() {
         loadEngine()
         setupGlobalShortcut()
+        accessibilityGranted = AXIsProcessTrusted()
     }
 
     private func setupGlobalShortcut() {
-        // Use Carbon RegisterEventHotKey — works globally without Accessibility permissions
+        let shortcut = config?.globalShortcut ?? "option+r"
+        let mode = config?.activationMode ?? .hold
+        registerHotKey(shortcut: shortcut, mode: mode)
+
+        // Listen for pressed notification
+        NotificationCenter.default.addObserver(
+            forName: .sottoHotKeyPressed,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleHotKeyPressed()
+            }
+        }
+
+        // Listen for released notification
+        NotificationCenter.default.addObserver(
+            forName: .sottoHotKeyReleased,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleHotKeyReleased()
+            }
+        }
+    }
+
+    private func registerHotKey(shortcut: String, mode: ActivationMode) {
+        unregisterHotKey()
+
+        guard let hotKey = parseCarbonHotKey(from: shortcut) else {
+            NSLog("[Sotto] Failed to parse shortcut: \(shortcut)")
+            return
+        }
+
+        currentShortcut = shortcut
+        currentMode = mode
+
         let hotKeyID = EventHotKeyID(signature: OSType(0x534F5454), id: 1) // "SOTT"
         var ref: EventHotKeyRef?
-        // kVK_ANSI_R = 0x0F, optionKey = 0x0800
         let status = RegisterEventHotKey(
-            UInt32(kVK_ANSI_R),
-            UInt32(optionKey),
+            hotKey.keyCode,
+            hotKey.modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -141,34 +248,91 @@ final class AppState: ObservableObject {
             hotKeyRef = ref
         } else {
             NSLog("[Sotto] Failed to register global hotkey: \(status)")
+            return
         }
 
-        // Install Carbon event handler for the hot key
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        // Install pressed handler (always)
+        var pressedEventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        var pressedRef: EventHandlerRef?
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
-            // Dispatch to main queue to call toggleRecording
             DispatchQueue.main.async {
-                // Access the shared AppState via NSApp delegate pattern
-                // Since we can't capture self in a C function pointer, use NotificationCenter
                 NotificationCenter.default.post(name: .sottoHotKeyPressed, object: nil)
             }
             return noErr
-        }, 1, &eventType, nil, nil)
+        }, 1, &pressedEventType, nil, &pressedRef)
+        pressedHandlerRef = pressedRef
 
-        // Listen for the notification
-        NotificationCenter.default.addObserver(
-            forName: .sottoHotKeyPressed,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.toggleRecording()
+        // Install released handler (only for hold mode)
+        if mode == .hold {
+            var releasedEventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+            var releasedRef: EventHandlerRef?
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .sottoHotKeyReleased, object: nil)
+                }
+                return noErr
+            }, 1, &releasedEventType, nil, &releasedRef)
+            releasedHandlerRef = releasedRef
+        }
+
+        NSLog("[Sotto] Registered hotkey: \(shortcut) mode: \(mode == .hold ? "hold" : "toggle")")
+    }
+
+    private func unregisterHotKey() {
+        if let ref = pressedHandlerRef {
+            RemoveEventHandler(ref)
+            pressedHandlerRef = nil
+        }
+        if let ref = releasedHandlerRef {
+            RemoveEventHandler(ref)
+            releasedHandlerRef = nil
+        }
+        if let ref = hotKeyRef {
+            UnregisterEventHotKey(ref)
+            hotKeyRef = nil
+        }
+    }
+
+    private func handleHotKeyPressed() {
+        switch currentMode {
+        case .toggle:
+            toggleRecording()
+        case .hold:
+            if !isRecording {
+                holdStartTime = Date()
+                startRecording()
+            } else {
+                // Already recording from a quick tap — toggle stop
+                stopRecording()
+                holdStartTime = nil
             }
         }
     }
 
+    private func handleHotKeyReleased() {
+        guard currentMode == .hold else { return }
+        guard isRecording else { return }
+
+        if let start = holdStartTime {
+            let elapsed = Date().timeIntervalSince(start)
+            if elapsed > 0.2 {
+                // Held long enough — stop recording
+                stopRecording()
+            }
+            // else: quick tap (<200ms), keep recording — next press will toggle-stop
+        }
+        holdStartTime = nil
+    }
+
     deinit {
         NotificationCenter.default.removeObserver(self)
+        // Inline cleanup since deinit can't call @MainActor methods
+        if let ref = pressedHandlerRef {
+            RemoveEventHandler(ref)
+        }
+        if let ref = releasedHandlerRef {
+            RemoveEventHandler(ref)
+        }
         if let ref = hotKeyRef {
             UnregisterEventHotKey(ref)
         }
@@ -227,6 +391,20 @@ final class AppState: ObservableObject {
         }
         startingRecording = true
 
+        let micOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let axOK = AXIsProcessTrusted()
+        accessibilityGranted = axOK
+
+        if micOK && axOK {
+            proceedWithRecording(engine: engine)
+        } else {
+            selectedSettingsTab = .permissions
+            SettingsWindowController.shared.show(appState: self)
+            startingRecording = false
+        }
+    }
+
+    private func proceedWithRecording(engine: SottoEngine) {
         let cfg = engine.getConfig()
         let listenConfig = ListenConfig(
             language: cfg.language,
@@ -280,9 +458,8 @@ final class AppState: ObservableObject {
             NSLog("[Sotto] Copied to clipboard")
         }
 
-        // Auto-paste (Cmd+V) — just attempt it; needs Accessibility permission
-        // Transcript stays on clipboard after paste (no save/restore race)
         if wantPaste {
+            accessibilityGranted = AXIsProcessTrusted()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.simulatePaste()
             }
@@ -327,11 +504,23 @@ final class AppState: ObservableObject {
 
     func updateConfig(_ newConfig: SottoConfig) {
         guard let engine else { return }
+
+        // Detect if hotkey settings changed
+        let shortcutChanged = newConfig.globalShortcut != config?.globalShortcut
+        let modeChanged = newConfig.activationMode != config?.activationMode
+
         do {
             try engine.updateConfig(config: newConfig)
             refreshConfig()
         } catch {
             lastError = error.localizedDescription
+            return
+        }
+
+        // Re-register hotkey if settings changed
+        if shortcutChanged || modeChanged, let cfg = config {
+            let shortcut = cfg.globalShortcut ?? "option+r"
+            registerHotKey(shortcut: shortcut, mode: cfg.activationMode)
         }
     }
 }

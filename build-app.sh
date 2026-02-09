@@ -40,6 +40,7 @@ SWIFT_FILES=(
     "$SOURCES/SottoApp.swift"
     "$SOURCES/AppState.swift"
     "$SOURCES/MenuBarView.swift"
+    "$SOURCES/PermissionView.swift"
     "$SOURCES/RecordingOverlay.swift"
     "$SOURCES/SettingsView.swift"
 )
