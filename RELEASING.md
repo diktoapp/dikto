@@ -1,4 +1,4 @@
-# Releasing
+# Release
 
 Releases are automated. Pushing a `vX.Y.Z` tag triggers the [`release.yml`](.github/workflows/release.yml) workflow which builds the DMG, CLI binary, checksums, creates a GitHub Release, and updates the Homebrew tap.
 
