@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-02-10
+
+### Added
+- Comprehensive test coverage with dedicated test directory (PR #6)
+- `release.sh` script for version bumping and tagging
+
+### Changed
+- CI hardening: SHA-pinned actions and permissions blocks (PR #1)
+- Fix duplicate CI runs on pull requests (PR #3)
+- Populate SHA-256 model hashes and enforce cargo-deny (PR #4)
+- Fix cargo-deny v2 config: remove deprecated keys (PR #5)
+- Clean up `.gitignore` and remove stray build artifacts (PR #7)
+
 ## [1.1.0] - 2026-02-10
 
 ### Fixed
