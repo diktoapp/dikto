@@ -72,7 +72,7 @@ pub const MODELS: &[ModelInfo] = &[
             ModelFile {
                 filename: "vocab.txt",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main", "/vocab.txt"),
-                size_mb: 1,
+                size_mb: 0,
                 sha256: "",
             },
         ],
@@ -104,7 +104,7 @@ pub const MODELS: &[ModelInfo] = &[
             ModelFile {
                 filename: "vocab.txt",
                 url: concat!("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main", "/vocab.txt"),
-                size_mb: 1,
+                size_mb: 0,
                 sha256: "",
             },
         ],
@@ -272,7 +272,7 @@ where
                     )));
                 }
                 info!("SHA-256 verified for {}", file.filename);
-            } else {
+            } else if file.size_mb > 0 {
                 // Fallback: verify file size (within 10% of expected)
                 let actual_size = tokio::fs::metadata(&temp_dest)
                     .await
@@ -393,14 +393,8 @@ mod tests {
     fn test_model_size_estimates_reasonable() {
         for model in MODELS {
             assert!(model.size_mb > 0, "Model {} has zero size", model.name);
-            for file in model.files {
-                assert!(
-                    file.size_mb > 0,
-                    "File {} in {} has zero size",
-                    file.filename,
-                    model.name
-                );
-            }
+            // Files may have size_mb == 0 for small files (e.g. vocab.txt)
+            // where MB-level granularity doesn't apply
         }
     }
 
