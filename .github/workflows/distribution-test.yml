@@ -1,6 +1,7 @@
 name: Distribution Test
 
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
@@ -8,7 +9,9 @@ on:
 jobs:
   test-install-script:
     name: Test curl installer
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: macos-14
     steps:
       - name: Run install script
@@ -41,7 +44,9 @@ jobs:
 
   test-homebrew-cask:
     name: Test Homebrew cask
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: macos-14
     steps:
       - name: Wait for Homebrew tap update
@@ -74,7 +79,9 @@ jobs:
 
   test-dmg-checksum:
     name: Test DMG checksum
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: macos-14
     steps:
       - name: Get latest release version
