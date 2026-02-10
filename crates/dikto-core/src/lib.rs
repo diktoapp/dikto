@@ -125,6 +125,15 @@ pub struct SessionHandle {
     stop_flag: Arc<AtomicBool>,
 }
 
+impl SessionHandle {
+    /// Create a SessionHandle for testing (not used by production code).
+    pub fn new_for_test() -> Self {
+        Self {
+            stop_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+
 #[uniffi::export]
 impl SessionHandle {
     /// Stop the recording session.
@@ -679,7 +688,7 @@ fn run_pipeline(
 }
 
 /// Parakeet TDT v3 supported languages (25 European languages).
-fn parakeet_v3_languages() -> Vec<LanguageInfo> {
+pub fn parakeet_v3_languages() -> Vec<LanguageInfo> {
     [
         ("en", "English"),
         ("de", "German"),
@@ -716,7 +725,7 @@ fn parakeet_v3_languages() -> Vec<LanguageInfo> {
 }
 
 /// Top Whisper-supported languages.
-fn whisper_languages() -> Vec<LanguageInfo> {
+pub fn whisper_languages() -> Vec<LanguageInfo> {
     [
         ("auto", "Auto-detect"),
         ("en", "English"),

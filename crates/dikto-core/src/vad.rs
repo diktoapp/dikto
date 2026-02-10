@@ -66,7 +66,7 @@ pub struct VadProcessor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum VadState {
+pub enum VadState {
     Idle,
     /// Speech detected but not yet confirmed (waiting for consecutive frames).
     Pending,
@@ -187,50 +187,9 @@ impl VadProcessor {
     pub fn chunk_size(&self) -> usize {
         self.chunk_size
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_vad_config_defaults() {
-        let config = VadConfig::default();
-        assert!((config.speech_threshold - 0.35).abs() < f32::EPSILON);
-        assert_eq!(config.silence_duration_ms, 1500);
-        assert_eq!(config.min_speech_duration_ms, 250);
-        assert_eq!(config.sample_rate, 16000);
-        assert_eq!(config.speech_activation_frames, 8);
-    }
-
-    #[test]
-    fn test_vad_state_machine_silence() {
-        // Feed silence → should stay Idle
-        let config = VadConfig::default();
-        let mut vad = VadProcessor::new(config).unwrap();
-        let silence = vec![0.0f32; 512];
-        let event = vad.process_chunk(&silence).unwrap();
-        assert_eq!(event, VadEvent::Silence);
-    }
-
-    #[test]
-    fn test_vad_pending_state_no_false_trigger() {
-        // 7 speech frames should NOT trigger SpeechStart (need 8)
-        let config = VadConfig {
-            speech_activation_frames: 8,
-            ..VadConfig::default()
-        };
-        let mut vad = VadProcessor::new(config).unwrap();
-
-        // Simulate 7 speech frames — all should return Silence (pending)
-        let silence = vec![0.0f32; 512];
-        for _ in 0..7 {
-            // We can't easily generate real speech, so test the state machine directly
-            // by manipulating state. Instead, feed silence and verify no SpeechStart.
-            let event = vad.process_chunk(&silence).unwrap();
-            assert_eq!(event, VadEvent::Silence);
-        }
-        // After only silence frames, state should still be Idle
-        assert_eq!(vad.state, VadState::Idle);
+    /// Get the current VAD state.
+    pub fn state(&self) -> VadState {
+        self.state
     }
 }

@@ -314,7 +314,7 @@ where
 }
 
 /// Verify the SHA-256 hash of a file.
-fn verify_file_sha256(path: &std::path::Path, expected_hex: &str) -> bool {
+pub fn verify_file_sha256(path: &std::path::Path, expected_hex: &str) -> bool {
     let Ok(mut file) = std::fs::File::open(path) else {
         return false;
     };
@@ -341,102 +341,4 @@ pub fn delete_model(name: &str) -> Result<(), ModelError> {
         warn!("Model {} not found at {}", name, dir.display());
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_find_model() {
-        assert!(find_model("parakeet-tdt-0.6b-v2").is_some());
-        assert!(find_model("nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_model_registry() {
-        assert_eq!(MODELS.len(), 6);
-        assert_eq!(MODELS[0].name, "parakeet-tdt-0.6b-v2");
-        assert_eq!(MODELS[0].files.len(), 4);
-        assert_eq!(MODELS[0].backend, ModelBackend::Parakeet);
-        assert_eq!(MODELS[1].name, "parakeet-tdt-0.6b-v3");
-        assert_eq!(MODELS[1].files.len(), 4);
-        assert_eq!(MODELS[1].backend, ModelBackend::Parakeet);
-        assert_eq!(MODELS[2].name, "whisper-tiny");
-        assert_eq!(MODELS[2].backend, ModelBackend::Whisper);
-        assert_eq!(MODELS[2].files.len(), 1);
-        assert!(find_model("distil-whisper-large-v3").is_some());
-    }
-
-    #[test]
-    fn test_model_path_is_directory() {
-        let path = model_path("parakeet-tdt-0.6b-v2").unwrap();
-        assert!(path.to_string_lossy().ends_with("parakeet-tdt-0.6b-v2"));
-    }
-
-    #[test]
-    fn test_all_model_urls_are_https() {
-        for model in MODELS {
-            for file in model.files {
-                assert!(
-                    file.url.starts_with("https://"),
-                    "Model file {} in {} has non-HTTPS URL: {}",
-                    file.filename,
-                    model.name,
-                    file.url
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_model_size_estimates_reasonable() {
-        for model in MODELS {
-            assert!(model.size_mb > 0, "Model {} has zero size", model.name);
-            // Files may have size_mb == 0 for small files (e.g. vocab.txt)
-            // where MB-level granularity doesn't apply
-        }
-    }
-
-    #[test]
-    fn test_sha256_hashes_valid_hex() {
-        for model in MODELS {
-            for file in model.files {
-                if !file.sha256.is_empty() {
-                    assert_eq!(
-                        file.sha256.len(),
-                        64,
-                        "SHA-256 for {} in {} is not 64 hex chars",
-                        file.filename,
-                        model.name
-                    );
-                    assert!(
-                        file.sha256.chars().all(|c| c.is_ascii_hexdigit()),
-                        "SHA-256 for {} in {} contains non-hex chars",
-                        file.filename,
-                        model.name
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_verify_file_sha256() {
-        use std::io::Write;
-        let tmp = std::env::temp_dir().join("dikto_sha256_test");
-        let mut f = std::fs::File::create(&tmp).unwrap();
-        f.write_all(b"hello world").unwrap();
-        drop(f);
-
-        // SHA-256 of "hello world"
-        let expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
-        assert!(verify_file_sha256(&tmp, expected));
-        assert!(!verify_file_sha256(
-            &tmp,
-            "0000000000000000000000000000000000000000000000000000000000000000"
-        ));
-
-        let _ = std::fs::remove_file(&tmp);
-    }
 }

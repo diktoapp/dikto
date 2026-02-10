@@ -189,14 +189,3 @@ impl WhisperEngine {
         Ok(text)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_transcribe_config_defaults() {
-        let config = TranscribeConfig::default();
-        assert_eq!(config.language, "en");
-    }
-}

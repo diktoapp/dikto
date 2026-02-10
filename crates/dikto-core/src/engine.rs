@@ -53,6 +53,14 @@ pub struct AsrSession {
 }
 
 impl AsrSession {
+    /// Create a new session with the given language (for testing without an engine).
+    pub fn new(language: String) -> Self {
+        Self {
+            audio_buffer: Vec::new(),
+            language,
+        }
+    }
+
     /// Feed audio samples (16kHz mono f32).
     pub fn feed_samples(&mut self, samples: &[f32]) -> Vec<TranscriptSegment> {
         self.audio_buffer.extend_from_slice(samples);
@@ -123,7 +131,7 @@ impl AsrSession {
 }
 
 /// Returns true if the text looks like a known ASR hallucination token.
-fn is_hallucination(text: &str) -> bool {
+pub fn is_hallucination(text: &str) -> bool {
     let t = text.trim().to_lowercase();
     let hallucinations = [
         "[blank_audio]",
@@ -141,27 +149,4 @@ fn is_hallucination(text: &str) -> bool {
         "(blank audio)",
     ];
     hallucinations.contains(&t.as_str())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_hallucination() {
-        assert!(is_hallucination("[BLANK_AUDIO]"));
-        assert!(is_hallucination("[MUSIC]"));
-        assert!(is_hallucination("[INAUDIBLE]"));
-        assert!(is_hallucination("[no speech]"));
-        assert!(is_hallucination("(music)"));
-        assert!(is_hallucination("(laughter)"));
-        assert!(is_hallucination("(silence)"));
-        assert!(is_hallucination("  [BLANK_AUDIO]  ")); // with whitespace
-        assert!(!is_hallucination("Hello world"));
-        assert!(!is_hallucination("This is [a] test"));
-        assert!(!is_hallucination(""));
-        // These should NOT be hallucinations (valid speech with brackets/parens)
-        assert!(!is_hallucination("(pause) let me think"));
-        assert!(!is_hallucination("[unclear] something here"));
-    }
 }
