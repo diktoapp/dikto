@@ -2,8 +2,8 @@
 # install.sh - Curl-pipeable installer for Dikto (voice-to-text for macOS)
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/diktoapp/dikto/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/diktoapp/dikto/main/install.sh | bash -s -- --cli
+#   curl -fsSL https://diktoapp.github.io/install.sh | bash
+#   curl -fsSL https://diktoapp.github.io/install.sh | bash -s -- --cli
 #
 # Options:
 #   --cli    Install only the CLI binary to /usr/local/bin/

@@ -81,7 +81,7 @@ jobs:
             ### One-liner
 
             ```bash
-            curl -fsSL https://diktoapp.github.io/dikto/install.sh | bash
+            curl -fsSL https://diktoapp.github.io/install.sh | bash
             ```
 
             ### Homebrew (recommended)

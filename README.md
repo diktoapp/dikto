@@ -15,7 +15,7 @@ Voice-to-text for macOS. Records speech, transcribes locally. No cloud.
 **One-liner** (downloads, verifies, installs, bypasses Gatekeeper):
 
 ```bash
-curl -fsSL https://diktoapp.github.io/dikto/install.sh | bash
+curl -fsSL https://diktoapp.github.io/install.sh | bash
 ```
 
 **Homebrew:**
