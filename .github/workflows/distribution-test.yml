@@ -32,7 +32,7 @@ jobs:
       - name: Verify app bundle structure
         run: |
           test -f /Applications/Dikto.app/Contents/Info.plist
-          test -f /Applications/Dikto.app/Contents/MacOS/Dikto
+          test -f /Applications/Dikto.app/Contents/MacOS/DiktoApp
           echo "App bundle structure OK"
 
       - name: Clean up
@@ -63,7 +63,7 @@ jobs:
       - name: Verify app bundle structure
         run: |
           test -f /Applications/Dikto.app/Contents/Info.plist
-          test -f /Applications/Dikto.app/Contents/MacOS/Dikto
+          test -f /Applications/Dikto.app/Contents/MacOS/DiktoApp
           echo "App bundle structure OK"
 
       - name: Clean up
@@ -105,7 +105,7 @@ jobs:
           MOUNT_OUTPUT=$(hdiutil attach -nobrowse /tmp/Dikto-${{ steps.version.outputs.version }}.dmg 2>&1)
           MOUNT_POINT=$(echo "${MOUNT_OUTPUT}" | grep -oE '/Volumes/.*' | tail -1 | sed 's/[[:space:]]*$//')
           test -d "${MOUNT_POINT}/Dikto.app"
-          test -f "${MOUNT_POINT}/Dikto.app/Contents/MacOS/Dikto"
+          test -f "${MOUNT_POINT}/Dikto.app/Contents/MacOS/DiktoApp"
           echo "DMG contents verified at ${MOUNT_POINT}"
           hdiutil detach "${MOUNT_POINT}" -quiet
 
