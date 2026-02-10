@@ -6,6 +6,9 @@ on:
     workflows: ["Release"]
     types: [completed]
 
+permissions:
+  contents: read
+
 jobs:
   test-install-script:
     name: Test curl installer
