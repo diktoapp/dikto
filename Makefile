@@ -45,8 +45,19 @@ package: build-app
 release: build-rust generate-bindings
 	./build-app.sh --release
 
-## Clean all build artifacts
+## Clean build artifacts (quick rebuild)
 clean:
 	$(CARGO) clean
 	rm -rf $(BINDINGS_DIR)
 	rm -rf build/
+
+## Clean everything for a fresh run (models, config, caches, build artifacts)
+clean-all: clean
+	rm -rf $(HOME)/.local/share/dikto/
+	rm -rf $(HOME)/.config/dikto/
+	rm -rf $(HOME)/Library/Logs/Homebrew/dikto/
+	rm -f $(HOME)/Library/Caches/Homebrew/downloads/*--dikto-*.tar.gz
+	rm -f $(HOME)/Library/Caches/Homebrew/downloads/*--Dikto-*.dmg
+	rm -f $(HOME)/Library/Caches/Homebrew/dikto--*.tar.gz
+	rm -f $(HOME)/Library/Caches/Homebrew/Cask/Dikto-*.dmg
+	@echo "Clean slate. Next run will re-download models and recreate config."
