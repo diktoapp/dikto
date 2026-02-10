@@ -182,6 +182,7 @@ final class AppState: ObservableObject {
     @Published var downloadProgress: [String: Double] = [:]
     @Published var availableLanguages: [LanguageInfo] = []
     @Published var accessibilityGranted = false
+    @Published var needsOnboarding = false
     @Published var selectedSettingsTab: SettingsTab = .general
     let overlayController = RecordingOverlayController()
     private var engine: DiktoEngine?
@@ -200,9 +201,23 @@ final class AppState: ObservableObject {
 
     init() {
         loadEngine()
-        setupGlobalShortcut()
-        accessibilityGranted = probeAccessibilityPermission()
+        let micOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let axOK = probeAccessibilityPermission()
+        accessibilityGranted = axOK
+
+        if micOK && axOK {
+            setupGlobalShortcut()
+        } else {
+            needsOnboarding = true
+        }
         setupMemoryPressureMonitor()
+    }
+
+    func onPermissionsGranted() {
+        needsOnboarding = false
+        if hotKeyRef == nil {
+            setupGlobalShortcut()
+        }
     }
 
     private func setupGlobalShortcut() {

@@ -41,6 +41,7 @@ SWIFT_FILES=(
     "$SOURCES/AppState.swift"
     "$SOURCES/KeyCodes.swift"
     "$SOURCES/MenuBarView.swift"
+    "$SOURCES/OnboardingView.swift"
     "$SOURCES/PermissionView.swift"
     "$SOURCES/RecordingOverlay.swift"
     "$SOURCES/SettingsView.swift"

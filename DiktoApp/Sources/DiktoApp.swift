@@ -52,6 +52,59 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+@MainActor
+final class OnboardingWindowController: NSObject, NSWindowDelegate {
+    static let shared = OnboardingWindowController()
+    private var window: NSWindow?
+    private var hostingView: NSHostingView<AnyView>?
+
+    func show(appState: AppState) {
+        if let existing = window, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let onboardingView = OnboardingView()
+            .environmentObject(appState)
+        let hosting = NSHostingView(rootView: AnyView(onboardingView))
+        hosting.frame = NSRect(x: 0, y: 0, width: 400, height: 360)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 360),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.title = "Welcome to Dikto"
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+
+        self.window = window
+        self.hostingView = hosting
+    }
+
+    func dismiss() {
+        window?.close()
+        window = nil
+        hostingView = nil
+    }
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            self.window = nil
+            self.hostingView = nil
+        }
+    }
+}
+
 @main
 struct DiktoApp: App {
     @StateObject private var appState = AppState()
