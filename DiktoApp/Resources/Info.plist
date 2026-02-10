@@ -17,18 +17,18 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.1</string>
+	<string>1.1.2</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright 2026 Dikto contributors. MIT License.</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Dikto needs microphone access to transcribe your speech to text.</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>Dikto needs Accessibility permission to automatically paste transcribed text into your active application.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright 2026 Dikto contributors. MIT License.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dikto needs microphone access to transcribe your speech to text.</string>
 </dict>
 </plist>
