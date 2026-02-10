@@ -69,11 +69,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         let onboardingView = OnboardingView()
             .environmentObject(appState)
         let hosting = NSHostingView(rootView: AnyView(onboardingView))
-        hosting.frame = NSRect(x: 0, y: 0, width: 400, height: 360)
+        hosting.frame = NSRect(x: 0, y: 0, width: 440, height: 380)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 360),
-            styleMask: [.titled],
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 380),
+            styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )

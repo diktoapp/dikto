@@ -357,8 +357,31 @@ struct GeneralSettingsView: View {
 struct ModelsSettingsView: View {
     @EnvironmentObject var appState: AppState
 
+    private var noModelReady: Bool {
+        !appState.models.contains(where: { $0.isDownloaded })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            if noModelReady {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.title3)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No model installed")
+                            .fontWeight(.medium)
+                            .font(.callout)
+                        Text("Download a model below to start using Dikto. Whisper Tiny is recommended for a quick start.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.08))
+            }
+
             List {
                 ForEach(appState.models, id: \.name) { model in
                     HStack(spacing: 10) {

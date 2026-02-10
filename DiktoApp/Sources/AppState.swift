@@ -152,18 +152,27 @@ final class DownloadCallback: DownloadProgressCallback, @unchecked Sendable {
     }
 
     func onComplete(modelName: String) {
-        DispatchQueue.main.async { [weak self] in
-            self?.appState?.downloadProgress.removeValue(forKey: modelName)
-            self?.appState?.refreshModels()
-            self?.appState?.refreshModelAvailability()
+        DispatchQueue.main.async { [self] in
+            guard let appState = self.appState else { return }
+            appState.downloadProgress.removeValue(forKey: modelName)
+            appState.activeDownloadCallback = nil
+            // Auto-switch to the downloaded model if none is currently available
+            if !appState.modelAvailable {
+                appState.switchModel(name: modelName)
+            } else {
+                appState.refreshModels()
+                appState.refreshModelAvailability()
+            }
         }
     }
 
     func onError(error: String) {
-        DispatchQueue.main.async { [weak self] in
-            guard let name = self?.modelName else { return }
-            self?.appState?.downloadProgress.removeValue(forKey: name)
-            self?.appState?.lastError = "Download failed: \(error)"
+        let name = self.modelName
+        DispatchQueue.main.async { [self] in
+            guard let appState = self.appState else { return }
+            appState.downloadProgress.removeValue(forKey: name)
+            appState.activeDownloadCallback = nil
+            appState.lastError = "Download failed: \(error)"
         }
     }
 }
@@ -188,6 +197,7 @@ final class AppState: ObservableObject {
     private var engine: DiktoEngine?
     private var sessionHandle: SessionHandle?
     private var activeCallback: AppCallback?
+    var activeDownloadCallback: DownloadCallback?
     private var hotKeyRef: EventHotKeyRef?
     private var pressedHandlerRef: EventHandlerRef?
     private var releasedHandlerRef: EventHandlerRef?
@@ -443,6 +453,8 @@ final class AppState: ObservableObject {
         }
         guard modelAvailable else {
             lastError = "No model downloaded. Open Settings to download one."
+            selectedSettingsTab = .models
+            SettingsWindowController.shared.show(appState: self)
             return
         }
         startingRecording = true
@@ -569,10 +581,12 @@ final class AppState: ObservableObject {
     func downloadModel(name: String) {
         guard let engine else { return }
         let callback = DownloadCallback(appState: self, modelName: name)
+        activeDownloadCallback = callback  // retain until completion
         downloadProgress[name] = 0.0
         do {
             try engine.downloadModel(modelName: name, callback: callback)
         } catch {
+            activeDownloadCallback = nil
             downloadProgress.removeValue(forKey: name)
             lastError = "Download failed: \(error.localizedDescription)"
         }

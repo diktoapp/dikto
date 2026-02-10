@@ -66,10 +66,18 @@ struct OnboardingView: View {
                         .fontWeight(.medium)
                 }
                 .transition(.opacity)
+            } else {
+                Button("Skip for now") {
+                    appState.needsOnboarding = false
+                    OnboardingWindowController.shared.dismiss()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .padding(24)
-        .frame(width: 400)
+        .frame(width: 440)
         .onAppear {
             startPolling()
         }
@@ -98,16 +106,20 @@ struct OnboardingView: View {
                 HStack(spacing: 8) {
                     Text(title)
                         .fontWeight(.medium)
+                        .lineLimit(1)
                     statusBadge(granted: granted)
                 }
                 Text(description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 4)
 
             action()
+                .fixedSize()
         }
         .padding(12)
         .background(
