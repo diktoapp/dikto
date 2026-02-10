@@ -1,10 +1,41 @@
+# macOS
 .DS_Store
-target/
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Build artifacts
+target*/
 build/
 *.dSYM
 .build/
 temp/
+
+# Generated code
 DiktoApp/Generated/
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Swift / Xcode
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.playground/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+DerivedData/
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+Package.resolved
 
 # Editor/IDE
 *.swp
@@ -12,9 +43,12 @@ DiktoApp/Generated/
 *~
 .vscode/
 .idea/
-xcuserdata/
-.swiftpm/
+*.sublime-workspace
+*.sublime-project
 
 # Environment
 .env
 .env.*
+
+# Logs
+*.log
