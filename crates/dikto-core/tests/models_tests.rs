@@ -111,7 +111,10 @@ fn model_filenames_unique_within_model() {
 /// Parakeet models must have encoder-model.onnx, decoder_joint-model.onnx, and vocab.txt.
 #[test]
 fn parakeet_models_have_required_files() {
-    for model in MODELS.iter().filter(|m| m.backend == ModelBackend::Parakeet) {
+    for model in MODELS
+        .iter()
+        .filter(|m| m.backend == ModelBackend::Parakeet)
+    {
         let filenames: Vec<&str> = model.files.iter().map(|f| f.filename).collect();
         assert!(
             filenames.contains(&"encoder-model.onnx"),

@@ -2,7 +2,7 @@
 // shortcut parsing, and backward compatibility.
 
 use dikto_core::config::{
-    is_valid_shortcut, config_dir, config_path, data_dir, default_model_name, models_dir,
+    config_dir, config_path, data_dir, default_model_name, is_valid_shortcut, models_dir,
     ActivationMode, DiktoConfig,
 };
 
