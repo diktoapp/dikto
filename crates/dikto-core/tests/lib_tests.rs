@@ -10,8 +10,6 @@ use dikto_core::{
     parakeet_v3_languages, whisper_languages, DiktoError, LanguageInfo, ListenConfig,
     ModelInfoRecord, RecordingState, SessionHandle,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // SessionHandle

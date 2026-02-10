@@ -57,7 +57,7 @@ fn transcript_segment_debug() {
         text: "debug".to_string(),
         is_final: true,
     };
-    let debug_str = format!("{:?}", seg);
+    let debug_str = format!("{seg:?}");
     assert!(debug_str.contains("debug"));
     assert!(debug_str.contains("true"));
 }
