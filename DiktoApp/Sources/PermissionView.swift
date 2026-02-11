@@ -13,20 +13,20 @@ struct PermissionsSettingsView: View {
             Form {
                 Section {
                     // Microphone row
-                    HStack(spacing: 12) {
+                    HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: "mic.fill")
                             .font(.title2)
                             .foregroundStyle(.blue)
-                            .frame(width: 28)
+                            .frame(width: Theme.IconSize.lg)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                            HStack(spacing: Theme.Spacing.sm) {
                                 Text("Microphone")
                                     .fontWeight(.medium)
-                                statusBadge(granted: micStatus == .authorized)
+                                StatusBadge(granted: micStatus == .authorized)
                             }
                             Text("Dikto needs microphone access to hear your voice and transcribe it into text.")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(.secondary)
                         }
 
@@ -34,27 +34,28 @@ struct PermissionsSettingsView: View {
 
                         micActionButton
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Theme.Spacing.xxs)
+                    .help("Required for voice transcription")
 
                     // Accessibility row
-                    HStack(spacing: 12) {
+                    HStack(spacing: Theme.Spacing.md) {
                         Image(systemName: "accessibility")
                             .font(.title2)
                             .foregroundStyle(.blue)
-                            .frame(width: 28)
+                            .frame(width: Theme.IconSize.lg)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                            HStack(spacing: Theme.Spacing.sm) {
                                 Text("Accessibility")
                                     .fontWeight(.medium)
-                                statusBadge(granted: axGranted)
+                                StatusBadge(granted: axGranted)
                             }
                             Text("Dikto needs Accessibility permission to automatically paste transcribed text into your active app.")
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(.secondary)
                             if !axGranted {
                                 Text("If permission appears enabled but isn't working, click the button to reset and re-grant.")
-                                    .font(.caption2)
+                                    .font(Theme.Typography.caption)
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -69,11 +70,14 @@ struct PermissionsSettingsView: View {
                             .help("Clears any stale permission entry and re-prompts")
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Theme.Spacing.xxs)
+                    .help("Required for auto-paste into other applications")
                 }
             }
             .formStyle(.grouped)
         }
+        .animation(Theme.Animation.standard, value: micStatus == .authorized)
+        .animation(Theme.Animation.standard, value: axGranted)
         .onAppear {
             refreshMicStatus()
             refreshAxStatus()
@@ -81,31 +85,6 @@ struct PermissionsSettingsView: View {
         }
         .onDisappear {
             stopPollingAccessibility()
-        }
-    }
-
-    // MARK: - Status Badge
-
-    @ViewBuilder
-    private func statusBadge(granted: Bool) -> some View {
-        if granted {
-            HStack(spacing: 3) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
-                Text("Granted")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.green)
-        } else {
-            HStack(spacing: 3) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption2)
-                Text("Not Granted")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.red)
         }
     }
 

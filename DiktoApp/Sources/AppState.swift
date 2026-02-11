@@ -556,6 +556,7 @@ final class AppState: ObservableObject {
             try engine.switchModel(modelName: name)
             modelAvailable = engine.isModelAvailable()
             modelInMemory = engine.isModelLoaded()
+            lastError = nil
             refreshModels()
             refreshConfig()
             refreshLanguages()

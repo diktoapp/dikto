@@ -33,7 +33,7 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.permissions)
         }
-        .frame(width: 420, height: 480)
+        .frame(width: Theme.Layout.settingsWidth, height: Theme.Layout.settingsHeight)
     }
 }
 
@@ -119,6 +119,7 @@ struct GeneralSettingsView: View {
                 Section {
                     Toggle("Launch Dikto at login", isOn: $launchAtLogin)
                         .onChange(of: launchAtLogin) { guard loaded else { return }; setLaunchAtLogin(launchAtLogin) }
+                        .help("Automatically start Dikto when you log in")
                 }
 
                 Section("Shortcut") {
@@ -132,10 +133,10 @@ struct GeneralSettingsView: View {
                                 startRecordingShortcut()
                             }
                         }) {
-                            HStack(spacing: 6) {
+                            HStack(spacing: Theme.Spacing.xs) {
                                 if isRecordingShortcut {
                                     Image(systemName: "record.circle")
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Theme.Colors.statusRecording)
                                     Text("Press shortcut...")
                                         .foregroundStyle(.secondary)
                                 } else {
@@ -144,10 +145,10 @@ struct GeneralSettingsView: View {
                                 }
                             }
                             .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, Theme.Spacing.xxs)
                             .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(isRecordingShortcut ? Color.red.opacity(0.1) : Color.secondary.opacity(0.1))
+                                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                                    .fill(isRecordingShortcut ? Theme.Colors.statusRecording.opacity(0.1) : Color.secondary.opacity(0.1))
                             )
                         }
                         .buttonStyle(.plain)
@@ -166,8 +167,8 @@ struct GeneralSettingsView: View {
 
                     if let error = shortcutError {
                         Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.statusWarning)
                     }
 
                     Picker("Activation mode", selection: $activationMode) {
@@ -182,22 +183,24 @@ struct GeneralSettingsView: View {
                     Text(activationMode == .hold
                         ? "Hold the hotkey to record, release to stop."
                         : "Press the hotkey to start recording, press again to stop.")
-                        .font(.caption2)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(.tertiary)
                 }
 
-                Section {
+                Section("Behavior") {
                     Toggle("Copy result to clipboard", isOn: $autoCopy)
                         .onChange(of: autoCopy) { guard loaded else { return }; saveSettings() }
                         .disabled(autoPaste)
+                        .help("Copy transcribed text to the clipboard")
                     Toggle("Auto-paste into active app", isOn: $autoPaste)
                         .onChange(of: autoPaste) {
                             guard loaded else { return }
                             if autoPaste { autoCopy = true }
                             saveSettings()
                         }
+                        .help("Automatically paste transcribed text into the focused app")
                     Text("Requires Accessibility permission in System Settings")
-                        .font(.caption2)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -216,9 +219,9 @@ struct GeneralSettingsView: View {
                 }
 
                 if activationMode == .toggle {
-                    Section {
+                    Section("Recording") {
                         LabeledContent("Max duration") {
-                            HStack(spacing: 8) {
+                            HStack(spacing: Theme.Spacing.sm) {
                                 Slider(value: $maxDuration, in: 5...120, step: 5)
                                     .onChange(of: maxDuration) { guard loaded else { return }; saveSettings() }
                                     .frame(maxWidth: 160)
@@ -228,9 +231,10 @@ struct GeneralSettingsView: View {
                                     .frame(width: 40, alignment: .trailing)
                             }
                         }
+                        .help("Maximum recording duration before auto-stop")
 
                         LabeledContent("Silence timeout") {
-                            HStack(spacing: 8) {
+                            HStack(spacing: Theme.Spacing.sm) {
                                 Slider(value: $silenceDuration, in: 500...5000, step: 250)
                                     .onChange(of: silenceDuration) { guard loaded else { return }; saveSettings() }
                                     .frame(maxWidth: 160)
@@ -240,6 +244,7 @@ struct GeneralSettingsView: View {
                                     .frame(width: 40, alignment: .trailing)
                             }
                         }
+                        .help("Stop recording after this duration of silence")
                     }
                 }
             }
@@ -368,52 +373,38 @@ struct ModelsSettingsView: View {
             if noModelReady {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.Colors.statusWarning)
                         .font(.title3)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("No model installed")
                             .fontWeight(.medium)
-                            .font(.callout)
+                            .font(Theme.Typography.callout)
                         Text("Download a model below to start using Dikto. Whisper Tiny is recommended for a quick start.")
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(12)
+                .padding(Theme.Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.08))
+                .background(Theme.Colors.badgeWarning)
             }
 
             List {
                 ForEach(appState.models, id: \.name) { model in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
+                            HStack(spacing: Theme.Spacing.xs) {
                                 Text(model.name)
                                     .fontWeight(isActive(model) ? .semibold : .regular)
                                 if isActive(model) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
-                                        .font(.caption)
+                                        .foregroundStyle(Theme.Colors.statusActive)
+                                        .font(Theme.Typography.caption)
                                 }
-                                Text(model.backend)
-                                    .font(.system(size: 9, weight: .medium))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(
-                                        model.backend == "Parakeet"
-                                            ? Color.blue.opacity(0.15)
-                                            : Color.purple.opacity(0.15)
-                                    )
-                                    .foregroundStyle(
-                                        model.backend == "Parakeet"
-                                            ? Color.blue
-                                            : Color.purple
-                                    )
-                                    .cornerRadius(3)
+                                BackendTag(backend: model.backend)
                             }
                             Text(model.description)
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -421,26 +412,28 @@ struct ModelsSettingsView: View {
                         Spacer()
 
                         Text(formatSize(model.sizeMb))
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(.tertiary)
 
                         if let progress = appState.downloadProgress[model.name] {
                             VStack(spacing: 2) {
                                 ProgressView(value: progress)
                                     .frame(width: 60)
-                                Text("Downloading...")
+                                Text("\(Int(progress * 100))%")
                                     .font(.system(size: 9))
                                     .foregroundStyle(.secondary)
                             }
+                            .transition(.opacity)
                         } else if model.isDownloaded {
                             if !isActive(model) {
                                 Button("Use") {
                                     appState.switchModel(name: model.name)
                                 }
                                 .controlSize(.small)
+                                .help("Switch to this model")
                             } else {
                                 Text("Active")
-                                    .font(.caption)
+                                    .font(Theme.Typography.caption)
                                     .foregroundStyle(.secondary)
                             }
                         } else {
@@ -449,23 +442,24 @@ struct ModelsSettingsView: View {
                             }
                             .controlSize(.small)
                             .disabled(!appState.downloadProgress.isEmpty)
+                            .help("Download this model to your device")
                         }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, Theme.Spacing.xxs)
                 }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
 
             HStack {
                 Text("Or via terminal:")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                 Text("dikto --setup --model <name>")
-                    .font(.caption.monospaced())
+                    .font(Theme.Typography.mono)
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, 10)
         }
         .onAppear { appState.refreshModels() }
