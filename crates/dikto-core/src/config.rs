@@ -88,7 +88,7 @@ fn default_true() -> bool {
 }
 
 fn default_global_shortcut() -> Option<String> {
-    Some("option+r".to_string())
+    Some("option+space".to_string())
 }
 
 impl Default for DiktoConfig {
@@ -131,11 +131,11 @@ impl DiktoConfig {
         // Validate global shortcut
         match &self.global_shortcut {
             Some(s) if !is_valid_shortcut(s) => {
-                warn!("Invalid shortcut '{}', resetting to 'option+r'", s);
-                self.global_shortcut = Some("option+r".to_string());
+                warn!("Invalid shortcut '{}', resetting to 'option+space'", s);
+                self.global_shortcut = default_global_shortcut();
             }
             None => {
-                self.global_shortcut = Some("option+r".to_string());
+                self.global_shortcut = default_global_shortcut();
             }
             _ => {}
         }

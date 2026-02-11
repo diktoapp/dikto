@@ -21,11 +21,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let settingsView = SettingsView()
             .environmentObject(appState)
         let hosting = NSHostingView(rootView: AnyView(settingsView))
-        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 480)
+        hosting.frame = NSRect(x: 0, y: 0, width: Theme.Layout.settingsWidth, height: Theme.Layout.settingsHeight)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.settingsWidth, height: Theme.Layout.settingsHeight),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -69,10 +69,10 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         let onboardingView = OnboardingView()
             .environmentObject(appState)
         let hosting = NSHostingView(rootView: AnyView(onboardingView))
-        hosting.frame = NSRect(x: 0, y: 0, width: 440, height: 380)
+        hosting.frame = NSRect(x: 0, y: 0, width: Theme.Layout.onboardingWidth, height: Theme.Layout.onboardingHeight)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.onboardingWidth, height: Theme.Layout.onboardingHeight),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -81,6 +81,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.title = "Welcome to Dikto"
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -95,6 +97,18 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window?.close()
         window = nil
         hostingView = nil
+    }
+
+    func animatedDismiss() {
+        guard let window = window else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            window.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            DispatchQueue.main.async {
+                self?.dismiss()
+            }
+        }
     }
 
     nonisolated func windowWillClose(_ notification: Notification) {

@@ -202,7 +202,7 @@ final class AppState: ObservableObject {
     private var pressedHandlerRef: EventHandlerRef?
     private var releasedHandlerRef: EventHandlerRef?
     private var startingRecording = false
-    private var holdStartTime: Date?
+
     private var currentShortcut: String?
     private var currentMode: ActivationMode = .hold
     private var idleUnloadTimer: Timer?
@@ -363,12 +363,7 @@ final class AppState: ObservableObject {
             toggleRecording()
         case .hold:
             if !isRecording {
-                holdStartTime = Date()
                 startRecording()
-            } else {
-                // Already recording from a quick tap — toggle stop
-                stopRecording()
-                holdStartTime = nil
             }
         }
     }
@@ -376,16 +371,7 @@ final class AppState: ObservableObject {
     private func handleHotKeyReleased() {
         guard currentMode == .hold else { return }
         guard isRecording else { return }
-
-        if let start = holdStartTime {
-            let elapsed = Date().timeIntervalSince(start)
-            if elapsed > 0.2 {
-                // Held long enough — stop recording
-                stopRecording()
-            }
-            // else: quick tap (<200ms), keep recording — next press will toggle-stop
-        }
-        holdStartTime = nil
+        stopRecording()
     }
 
     deinit {
@@ -570,6 +556,7 @@ final class AppState: ObservableObject {
             try engine.switchModel(modelName: name)
             modelAvailable = engine.isModelAvailable()
             modelInMemory = engine.isModelLoaded()
+            lastError = nil
             refreshModels()
             refreshConfig()
             refreshLanguages()

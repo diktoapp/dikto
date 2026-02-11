@@ -8,82 +8,362 @@ struct OnboardingView: View {
     @State private var axGranted: Bool = probeAccessibilityPermission()
     @State private var pollTimer: Timer?
     @State private var allGranted = false
+    @State private var currentStep = 0 // 0 = permissions, 1 = model download
+    @State private var isMovingForward = true
+    @State private var hasExistingModels = false
+    @State private var downloadingModelName: String?
+    @State private var downloadCompleted = false
+    @State private var downloadError: String?
+
+    private var totalSteps: Int { hasExistingModels ? 1 : 2 }
 
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            VStack(spacing: 6) {
+        VStack(spacing: 0) {
+            // ─── HEADER (fixed) ───
+            VStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: "ear.and.waveform")
-                    .font(.system(size: 36))
+                    .font(.system(size: Theme.IconSize.xl))
                     .foregroundStyle(.blue)
-                Text("Welcome to Dikto")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Text("Two permissions needed to get started")
+                Text(currentStep == 0 ? "Welcome to Dikto" : "Almost there")
+                    .font(Theme.Typography.largeTitle)
+                Text(currentStep == 0
+                    ? "Two permissions needed to get started"
+                    : "Pick one to get started. You can switch anytime in Settings.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.top, 4)
+            .padding(.top, Theme.Spacing.lg)
+            .padding(.horizontal, Theme.Spacing.xl)
 
-            // Permission cards
-            VStack(spacing: 12) {
-                // Microphone card
-                permissionCard(
-                    icon: "mic.fill",
-                    title: "Microphone",
-                    description: "Hear your voice and transcribe it into text.",
-                    granted: micStatus == .authorized
-                ) {
-                    micActionButton
-                }
-
-                // Accessibility card
-                permissionCard(
-                    icon: "accessibility",
-                    title: "Accessibility",
-                    description: "Auto-paste transcriptions into your active app.",
-                    granted: axGranted
-                ) {
-                    if !axGranted {
-                        Button("Grant Accessibility") {
-                            resetAndRequestAccessibility()
-                        }
-                        .controlSize(.small)
+            // ─── STEP DOTS ───
+            if totalSteps > 1 {
+                HStack(spacing: Theme.Spacing.sm) {
+                    ForEach(0..<totalSteps, id: \.self) { i in
+                        Circle()
+                            .fill(i == currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
+                            .frame(
+                                width: i == currentStep ? 8 : 6,
+                                height: i == currentStep ? 8 : 6
+                            )
+                            .animation(Theme.Animation.spring, value: currentStep)
                     }
                 }
-            }
-
-            // Footer
-            Text("These permissions stay on your device.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            if allGranted {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text("All set! Starting Dikto...")
-                        .fontWeight(.medium)
-                }
-                .transition(.opacity)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.sm)
             } else {
-                Button("Skip for now") {
-                    appState.needsOnboarding = false
-                    OnboardingWindowController.shared.dismiss()
-                }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Spacer()
+                    .frame(height: Theme.Spacing.sm)
             }
+
+            // ─── CONTENT (flexible, slides) ───
+            ZStack {
+                if currentStep == 0 {
+                    permissionsContent
+                        .transition(slideTransition)
+                }
+                if currentStep == 1 {
+                    modelDownloadContent
+                        .transition(slideTransition)
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .clipped()
+
+            Spacer(minLength: 0)
+
+            // ─── FOOTER (fixed) ───
+            Divider()
+            footerButtons
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.vertical, Theme.Spacing.md)
         }
-        .padding(24)
-        .frame(width: 440)
+        .frame(width: Theme.Layout.onboardingWidth, height: Theme.Layout.onboardingHeight)
+        .animation(Theme.Animation.standard, value: currentStep)
+        .animation(Theme.Animation.spring, value: allGranted)
+        .animation(Theme.Animation.spring, value: downloadCompleted)
         .onAppear {
+            hasExistingModels = appState.models.contains(where: { $0.isDownloaded })
             startPolling()
         }
-        .onDisappear {
-            stopPolling()
+        .onDisappear { stopPolling() }
+        .onChange(of: appState.downloadProgress) {
+            guard let name = downloadingModelName, !downloadCompleted else { return }
+            if appState.downloadProgress[name] == nil {
+                if appState.models.first(where: { $0.name == name })?.isDownloaded == true {
+                    downloadCompleted = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        OnboardingWindowController.shared.animatedDismiss()
+                    }
+                } else {
+                    downloadError = appState.lastError ?? "Download failed"
+                    downloadingModelName = nil
+                }
+            }
         }
+    }
+
+    // MARK: - Slide Transition
+
+    private var slideTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: isMovingForward ? .trailing : .leading).combined(with: .opacity),
+            removal: .move(edge: isMovingForward ? .leading : .trailing).combined(with: .opacity)
+        )
+    }
+
+    // MARK: - Navigation
+
+    private func goForward() {
+        guard currentStep < totalSteps - 1 else { return }
+        isMovingForward = true
+        withAnimation(Theme.Animation.standard) {
+            currentStep += 1
+        }
+    }
+
+    private func goBack() {
+        guard currentStep > 0 else { return }
+        isMovingForward = false
+        withAnimation(Theme.Animation.standard) {
+            currentStep -= 1
+        }
+        // Restart polling when returning to permissions step
+        if currentStep == 0 {
+            startPolling()
+        }
+    }
+
+    // MARK: - Footer Buttons
+
+    @ViewBuilder
+    private var footerButtons: some View {
+        HStack {
+            // Left side: Back button (only on step 2)
+            if currentStep == 1 && !downloadCompleted {
+                Button {
+                    goBack()
+                } label: {
+                    HStack(spacing: Theme.Spacing.xxxs) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(downloadingModelName != nil)
+            }
+
+            Spacer()
+
+            // Right side: context-dependent
+            if currentStep == 0 {
+                if allGranted {
+                    Button("Continue") {
+                        handlePermissionsContinue()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    Button("Skip for now") {
+                        handlePermissionsSkip()
+                    }
+                    .buttonStyle(.plain)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                }
+            } else if currentStep == 1 {
+                if downloadCompleted {
+                    Button("Get Started") {
+                        OnboardingWindowController.shared.animatedDismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    Button("Skip for now") {
+                        OnboardingWindowController.shared.animatedDismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Step 1: Permissions Content
+
+    private var permissionsContent: some View {
+        Form {
+            Section {
+                permissionCard(icon: "mic.fill", title: "Microphone",
+                    description: "Hear your voice and transcribe it into text.",
+                    granted: micStatus == .authorized) { micActionButton }
+            }
+            Section {
+                permissionCard(icon: "accessibility", title: "Accessibility",
+                    description: "Auto-paste transcriptions into your active app.",
+                    granted: axGranted) {
+                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.small) }
+                }
+            } footer: {
+                VStack(spacing: Theme.Spacing.sm) {
+                    Text("These permissions stay on your device.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.tertiary)
+                    if allGranted {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.Colors.statusActive)
+                            Text(hasExistingModels ? "All set! Starting Dikto..." : "All set! Setting up models...")
+                                .fontWeight(.medium)
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Step 2: Model Download Content
+
+    private var modelDownloadContent: some View {
+        Form {
+            if appState.models.isEmpty {
+                Section {
+                    Text("Could not load models")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                Section {
+                    ForEach(appState.models, id: \.name) { model in
+                        modelRow(model)
+                    }
+                } footer: {
+                    VStack(spacing: Theme.Spacing.sm) {
+                        if let error = downloadError {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Theme.Colors.statusWarning)
+                                Text(error)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.statusError)
+                                    .lineLimit(2)
+                            }
+                        }
+                        if downloadCompleted {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.Colors.statusActive)
+                                Text("All set! Starting Dikto...")
+                                    .fontWeight(.medium)
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { appState.refreshModels() }
+    }
+
+    // MARK: - Permission Continue / Skip
+
+    private func handlePermissionsContinue() {
+        stopPolling()
+        if hasExistingModels {
+            OnboardingWindowController.shared.animatedDismiss()
+        } else {
+            goForward()
+        }
+    }
+
+    private func handlePermissionsSkip() {
+        appState.needsOnboarding = false
+        stopPolling()
+        if hasExistingModels {
+            OnboardingWindowController.shared.animatedDismiss()
+        } else {
+            goForward()
+        }
+    }
+
+    // MARK: - Model Row
+
+    @ViewBuilder
+    private func modelRow(_ model: ModelInfoRecord) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                Text(model.name)
+                    .fontWeight(.medium)
+                HStack(spacing: Theme.Spacing.xs) {
+                    BackendTag(backend: model.backend)
+                    if model.name == "whisper-tiny" {
+                        highlightTag("Fastest Download", color: .green)
+                    } else if model.name == "parakeet-tdt-0.6b-v2" {
+                        highlightTag("Best Accuracy", color: .blue)
+                    }
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text(formatSize(model.sizeMb))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.tertiary)
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text(model.description)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: Theme.Spacing.xxs)
+
+            Group {
+                if let progress = appState.downloadProgress[model.name] {
+                    VStack(spacing: 2) {
+                        ProgressView(value: progress)
+                            .frame(width: 60)
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    .transition(.opacity)
+                } else if model.isDownloaded {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.statusActive)
+                } else {
+                    Button("Download") {
+                        downloadError = nil
+                        downloadingModelName = model.name
+                        appState.downloadModel(name: model.name)
+                    }
+                    .controlSize(.regular)
+                    .disabled(!appState.downloadProgress.isEmpty)
+                }
+            }
+            .fixedSize()
+        }
+        .padding(.vertical, Theme.Spacing.xxs)
+    }
+
+    // MARK: - Highlight Tag
+
+    private func highlightTag(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(Theme.Typography.monoSmall)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.12))
+            .foregroundStyle(color)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
     }
 
     // MARK: - Permission Card
@@ -96,64 +376,30 @@ struct OnboardingView: View {
         granted: Bool,
         @ViewBuilder action: () -> ActionContent
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(.blue)
-                .frame(width: 28)
+                .frame(width: Theme.IconSize.lg)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(title)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    statusBadge(granted: granted)
+                    StatusBadge(granted: granted)
                 }
                 Text(description)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: Theme.Spacing.xxs)
 
             action()
                 .fixedSize()
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(granted ? Color.green.opacity(0.5) : Color.secondary.opacity(0.2), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Status Badge
-
-    @ViewBuilder
-    private func statusBadge(granted: Bool) -> some View {
-        if granted {
-            HStack(spacing: 3) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
-                Text("Granted")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.green)
-        } else {
-            HStack(spacing: 3) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption2)
-                Text("Not Granted")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.red)
         }
     }
 
@@ -211,9 +457,19 @@ struct OnboardingView: View {
         AXIsProcessTrustedWithOptions(opts)
     }
 
+    // MARK: - Helpers
+
+    private func formatSize(_ mb: UInt32) -> String {
+        if mb >= 1024 {
+            return String(format: "%.1f GB", Double(mb) / 1024.0)
+        }
+        return "\(mb) MB"
+    }
+
     // MARK: - Polling
 
     private func startPolling() {
+        stopPolling()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             DispatchQueue.main.async {
                 micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -224,9 +480,15 @@ struct OnboardingView: View {
                 if micStatus == .authorized && axGranted && !allGranted {
                     allGranted = true
                     appState.onPermissionsGranted()
-                    // Auto-dismiss after showing success state
+                    // Auto-advance after showing success
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        OnboardingWindowController.shared.dismiss()
+                        guard currentStep == 0 else { return }
+                        stopPolling()
+                        if hasExistingModels {
+                            OnboardingWindowController.shared.animatedDismiss()
+                        } else {
+                            goForward()
+                        }
                     }
                 }
             }

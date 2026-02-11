@@ -39,6 +39,7 @@ SWIFT_FILES=(
     "$GENERATED/dikto_core.swift"
     "$SOURCES/DiktoApp.swift"
     "$SOURCES/AppState.swift"
+    "$SOURCES/Theme.swift"
     "$SOURCES/KeyCodes.swift"
     "$SOURCES/MenuBarView.swift"
     "$SOURCES/OnboardingView.swift"

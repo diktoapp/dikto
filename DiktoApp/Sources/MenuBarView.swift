@@ -14,17 +14,18 @@ struct MenuRowButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.xs)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(isHovered ? Color.primary.opacity(0.1) : Color.clear)
+                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                    .fill(isHovered ? Theme.Colors.menuHover : Color.clear)
             )
             .contentShape(Rectangle())
             .onHover { hovering in
                 isHovered = hovering
             }
+            .animation(Theme.Animation.quick, value: isHovered)
     }
 }
 
@@ -33,74 +34,74 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Header: bold title + right-aligned status
-            HStack {
-                Text("Dikto")
-                    .fontWeight(.bold)
-                Spacer()
-                if !statusText.isEmpty {
-                    Text(statusText)
-                        .foregroundStyle(.secondary)
+            // Header + info section (grouped, no dividers between)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack {
+                    Text("Dikto")
+                        .font(Theme.Typography.sectionTitle)
+                    Spacer()
+                    if appState.isRecording {
+                        Text("Recording...")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    } else if appState.isProcessing {
+                        Text("Processing...")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-
-            Text(shortcutHint)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 4)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.xs)
 
             Divider()
 
-            // Model info
-            HStack(spacing: 6) {
-                Image(systemName: "cpu")
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                Text(shortcutHint)
+                    .font(.body)
                     .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appState.config?.modelName ?? "No model")
-                    modelMemoryStatus
-                }
+
+                Text("Model: \(modelLabel)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
-            .font(.callout)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.xs)
 
             // Last transcript (only when present)
             if !appState.finalText.isEmpty {
                 Divider()
-                Text("Last Transcript")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 6)
-                    .padding(.bottom, 2)
-                let truncated = appState.finalText.count > 80
-                    ? String(appState.finalText.prefix(80)) + "..."
-                    : appState.finalText
-                Text(truncated)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                    Text("Last Transcript")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                    Text(appState.finalText)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
             }
 
             // Error
             if let error = appState.lastError {
                 Divider()
-                Text("⚠ \(error)")
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                Text(error)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xs)
             }
 
             Divider()
 
-            // Actions
             Button {
                 dismissMenuBarExtra()
                 SettingsWindowController.shared.show(appState: appState)
             } label: {
-                Text("Settings...")
+                Text("Settings")
             }
             .buttonStyle(MenuRowButtonStyle())
 
@@ -115,10 +116,21 @@ struct MenuBarView: View {
             .buttonStyle(MenuRowButtonStyle())
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(6)
-        .frame(width: 280)
+        .font(.body)
+        .padding(Theme.Spacing.xs)
+        .frame(width: Theme.Layout.menuBarWidth)
         .onAppear {
             appState.accessibilityGranted = probeAccessibilityPermission()
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var modelLabel: String {
+        if appState.modelAvailable {
+            return appState.config?.modelName ?? "None"
+        } else {
+            return "None"
         }
     }
 
@@ -131,45 +143,5 @@ struct MenuBarView: View {
         } else {
             return isHold ? "Hold \(shortcut) to record" : "\(shortcut) to record"
         }
-    }
-
-    private var statusText: String {
-        if appState.isProcessing {
-            return "Processing..."
-        }
-        if appState.isRecording {
-            return "Recording..."
-        }
-        if !appState.modelAvailable {
-            return "No model downloaded"
-        }
-        return ""
-    }
-
-    @ViewBuilder
-    private var modelMemoryStatus: some View {
-        if appState.modelInMemory {
-            Text("Loaded\(modelSizeString)")
-                .font(.caption)
-                .foregroundStyle(.green)
-        } else if appState.modelAvailable {
-            Text("Not loaded")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("Not downloaded")
-                .font(.caption)
-                .foregroundStyle(.orange)
-        }
-    }
-
-    private var modelSizeString: String {
-        guard let modelName = appState.config?.modelName,
-              let model = appState.models.first(where: { $0.name == modelName })
-        else { return "" }
-        if model.sizeMb >= 1024 {
-            return String(format: " (~%.1f GB)", Double(model.sizeMb) / 1024.0)
-        }
-        return " (~\(model.sizeMb) MB)"
     }
 }
