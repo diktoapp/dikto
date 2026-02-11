@@ -33,7 +33,7 @@ struct OnboardingView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-            .padding(.top, Theme.Spacing.xl)
+            .padding(.top, Theme.Spacing.lg)
             .padding(.horizontal, Theme.Spacing.xl)
 
             // ─── STEP DOTS ───
@@ -49,11 +49,11 @@ struct OnboardingView: View {
                             .animation(Theme.Animation.spring, value: currentStep)
                     }
                 }
-                .padding(.top, Theme.Spacing.lg)
-                .padding(.bottom, Theme.Spacing.md)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.sm)
             } else {
                 Spacer()
-                    .frame(height: Theme.Spacing.lg)
+                    .frame(height: Theme.Spacing.sm)
             }
 
             // ─── CONTENT (flexible, slides) ───
@@ -69,7 +69,6 @@ struct OnboardingView: View {
             }
             .frame(maxHeight: .infinity)
             .clipped()
-            .padding(.horizontal, Theme.Spacing.xl)
 
             Spacer(minLength: 0)
 
@@ -196,90 +195,82 @@ struct OnboardingView: View {
     // MARK: - Step 1: Permissions Content
 
     private var permissionsContent: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            // Microphone card
-            permissionCard(
-                icon: "mic.fill",
-                title: "Microphone",
-                description: "Hear your voice and transcribe it into text.",
-                granted: micStatus == .authorized
-            ) {
-                micActionButton
+        Form {
+            Section {
+                permissionCard(icon: "mic.fill", title: "Microphone",
+                    description: "Hear your voice and transcribe it into text.",
+                    granted: micStatus == .authorized) { micActionButton }
             }
-
-            // Accessibility card
-            permissionCard(
-                icon: "accessibility",
-                title: "Accessibility",
-                description: "Auto-paste transcriptions into your active app.",
-                granted: axGranted
-            ) {
-                if !axGranted {
-                    Button("Grant Accessibility") {
-                        resetAndRequestAccessibility()
+            Section {
+                permissionCard(icon: "accessibility", title: "Accessibility",
+                    description: "Auto-paste transcriptions into your active app.",
+                    granted: axGranted) {
+                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.small) }
+                }
+            } footer: {
+                VStack(spacing: Theme.Spacing.sm) {
+                    Text("These permissions stay on your device.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.tertiary)
+                    if allGranted {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.Colors.statusActive)
+                            Text(hasExistingModels ? "All set! Starting Dikto..." : "All set! Setting up models...")
+                                .fontWeight(.medium)
+                        }
+                        .transition(.scale.combined(with: .opacity))
                     }
-                    .controlSize(.small)
                 }
-            }
-
-            Text("These permissions stay on your device.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(.tertiary)
-
-            if allGranted {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Theme.Colors.statusActive)
-                    Text(hasExistingModels ? "All set! Starting Dikto..." : "All set! Setting up models...")
-                        .fontWeight(.medium)
-                }
-                .transition(.scale.combined(with: .opacity))
+                .frame(maxWidth: .infinity)
             }
         }
+        .formStyle(.grouped)
     }
 
     // MARK: - Step 2: Model Download Content
 
     private var modelDownloadContent: some View {
-        VStack(spacing: Theme.Spacing.md) {
+        Form {
             if appState.models.isEmpty {
-                Spacer()
-                Text("Could not load models")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
+                Section {
+                    Text("Could not load models")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
             } else {
-                ScrollView {
+                Section {
+                    ForEach(appState.models, id: \.name) { model in
+                        modelRow(model)
+                    }
+                } footer: {
                     VStack(spacing: Theme.Spacing.sm) {
-                        ForEach(appState.models, id: \.name) { model in
-                            modelRow(model)
+                        if let error = downloadError {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Theme.Colors.statusWarning)
+                                Text(error)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.statusError)
+                                    .lineLimit(2)
+                            }
+                        }
+                        if downloadCompleted {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.Colors.statusActive)
+                                Text("All set! Starting Dikto...")
+                                    .fontWeight(.medium)
+                            }
+                            .transition(.scale.combined(with: .opacity))
                         }
                     }
-                    .padding(.horizontal, Theme.Spacing.xxs)
+                    .frame(maxWidth: .infinity)
                 }
-            }
-
-            if let error = downloadError {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.Colors.statusWarning)
-                    Text(error)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.statusError)
-                        .lineLimit(2)
-                }
-            }
-
-            if downloadCompleted {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Theme.Colors.statusActive)
-                    Text("All set! Starting Dikto...")
-                        .fontWeight(.medium)
-                }
-                .transition(.scale.combined(with: .opacity))
             }
         }
+        .formStyle(.grouped)
         .onAppear { appState.refreshModels() }
     }
 
@@ -360,7 +351,7 @@ struct OnboardingView: View {
             }
             .fixedSize()
         }
-        .themeCard(granted: model.isDownloaded)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 
     // MARK: - Highlight Tag
@@ -410,7 +401,6 @@ struct OnboardingView: View {
             action()
                 .fixedSize()
         }
-        .themeCard(granted: granted)
     }
 
     // MARK: - Mic Action Button

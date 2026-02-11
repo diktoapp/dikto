@@ -140,30 +140,3 @@ struct BackendTag: View {
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
     }
 }
-
-/// Reusable card styling for permission cards.
-struct ThemeCardModifier: ViewModifier {
-    var granted: Bool = false
-
-    func body(content: Content) -> some View {
-        content
-            .padding(Theme.Spacing.md)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.Radius.lg)
-                    .fill(Theme.Colors.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.lg)
-                    .strokeBorder(
-                        granted ? Color.green.opacity(0.5) : Color.secondary.opacity(0.2),
-                        lineWidth: 0.5
-                    )
-            )
-    }
-}
-
-extension View {
-    func themeCard(granted: Bool = false) -> some View {
-        modifier(ThemeCardModifier(granted: granted))
-    }
-}
