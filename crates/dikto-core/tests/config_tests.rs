@@ -19,7 +19,7 @@ fn default_config_has_expected_values() {
     assert_eq!(config.max_duration, 30);
     assert_eq!(config.silence_duration_ms, 1500);
     assert!((config.speech_threshold - 0.35).abs() < f32::EPSILON);
-    assert_eq!(config.global_shortcut, Some("option+r".to_string()));
+    assert_eq!(config.global_shortcut, Some("option+space".to_string()));
     assert_eq!(config.activation_mode, ActivationMode::Hold);
     assert!(config.auto_paste);
     assert!(config.auto_copy);
@@ -51,7 +51,7 @@ fn deserialize_partial_json_fills_defaults() {
     assert_eq!(config.max_duration, 60);
     // Defaults for missing fields
     assert_eq!(config.silence_duration_ms, 1500);
-    assert_eq!(config.global_shortcut, Some("option+r".to_string()));
+    assert_eq!(config.global_shortcut, Some("option+space".to_string()));
 }
 
 /// An empty JSON object should deserialize to all serde defaults.
@@ -63,7 +63,7 @@ fn deserialize_empty_json_object_gives_defaults() {
     assert_eq!(config.max_duration, 30);
     assert_eq!(config.silence_duration_ms, 1500);
     assert!((config.speech_threshold - 0.35).abs() < f32::EPSILON);
-    assert_eq!(config.global_shortcut, Some("option+r".to_string()));
+    assert_eq!(config.global_shortcut, Some("option+space".to_string()));
     assert!(config.auto_paste);
     assert!(config.auto_copy);
 }
@@ -120,10 +120,10 @@ fn activation_mode_toggle_deserializes() {
 // Shortcut validation
 // ---------------------------------------------------------------------------
 
-/// "option+r" is a valid shortcut (one modifier, one key).
+/// "option+space" is a valid shortcut (one modifier, one key).
 #[test]
 fn shortcut_option_r_is_valid() {
-    assert!(is_valid_shortcut("option+r"));
+    assert!(is_valid_shortcut("option+space"));
 }
 
 /// "command+shift+space" is valid (two modifiers, one key).
@@ -166,7 +166,7 @@ fn shortcut_empty_is_invalid() {
 // Validate — shortcut reset
 // ---------------------------------------------------------------------------
 
-/// validate() should reset an invalid shortcut string to the default "option+r".
+/// validate() should reset an invalid shortcut string to the default "option+space".
 #[test]
 fn validate_resets_invalid_shortcut() {
     let mut config = DiktoConfig {
@@ -174,10 +174,10 @@ fn validate_resets_invalid_shortcut() {
         ..DiktoConfig::default()
     };
     config.validate();
-    assert_eq!(config.global_shortcut, Some("option+r".to_string()));
+    assert_eq!(config.global_shortcut, Some("option+space".to_string()));
 }
 
-/// validate() should replace None shortcut with the default "option+r".
+/// validate() should replace None shortcut with the default "option+space".
 #[test]
 fn validate_resets_none_shortcut() {
     let mut config = DiktoConfig {
@@ -185,7 +185,7 @@ fn validate_resets_none_shortcut() {
         ..DiktoConfig::default()
     };
     config.validate();
-    assert_eq!(config.global_shortcut, Some("option+r".to_string()));
+    assert_eq!(config.global_shortcut, Some("option+space".to_string()));
 }
 
 // ---------------------------------------------------------------------------
