@@ -9,73 +9,71 @@ struct PermissionsSettingsView: View {
     @State private var axTimer: Timer?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    // Microphone row
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "mic.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                            .frame(width: Theme.IconSize.lg)
+        Form {
+            Section {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: Theme.IconSize.lg)
 
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Text("Microphone")
-                                    .fontWeight(.medium)
-                                StatusBadge(granted: micStatus == .authorized)
-                            }
-                            Text("Dikto needs microphone access to hear your voice and transcribe it into text.")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Text("Microphone")
+                                .fontWeight(.medium)
+                            StatusBadge(granted: micStatus == .authorized)
                         }
-
-                        Spacer()
-
-                        micActionButton
+                        Text("Dikto needs microphone access to hear your voice and transcribe it into text.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, Theme.Spacing.xxs)
-                    .help("Required for voice transcription")
 
-                    // Accessibility row
-                    HStack(spacing: Theme.Spacing.md) {
-                        Image(systemName: "accessibility")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                            .frame(width: Theme.IconSize.lg)
+                    Spacer()
 
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
-                            HStack(spacing: Theme.Spacing.sm) {
-                                Text("Accessibility")
-                                    .fontWeight(.medium)
-                                StatusBadge(granted: axGranted)
-                            }
-                            Text("Dikto needs Accessibility permission to automatically paste transcribed text into your active app.")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(.secondary)
-                            if !axGranted {
-                                Text("If permission appears enabled but isn't working, click the button to reset and re-grant.")
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-
-                        Spacer()
-
-                        if !axGranted {
-                            Button("Grant Accessibility") {
-                                resetAndRequestAccessibility()
-                            }
-                            .controlSize(.small)
-                            .help("Clears any stale permission entry and re-prompts")
-                        }
-                    }
-                    .padding(.vertical, Theme.Spacing.xxs)
-                    .help("Required for auto-paste into other applications")
+                    micActionButton
                 }
+                .padding(.vertical, Theme.Spacing.xxs)
+                .help("Required for voice transcription")
             }
-            .formStyle(.grouped)
+
+            Section {
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "accessibility")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .frame(width: Theme.IconSize.lg)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Text("Accessibility")
+                                .fontWeight(.medium)
+                            StatusBadge(granted: axGranted)
+                        }
+                        Text("Dikto needs Accessibility permission to automatically paste transcribed text into your active app.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(.secondary)
+                        if !axGranted {
+                            Text("If permission appears enabled but isn't working, click the button to reset and re-grant.")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    Spacer()
+
+                    if !axGranted {
+                        Button("Grant Accessibility") {
+                            resetAndRequestAccessibility()
+                        }
+                        .controlSize(.small)
+                        .help("Clears any stale permission entry and re-prompts")
+                    }
+                }
+                .padding(.vertical, Theme.Spacing.xxs)
+                .help("Required for auto-paste into other applications")
+            }
         }
+        .formStyle(.grouped)
         .animation(Theme.Animation.standard, value: micStatus == .authorized)
         .animation(Theme.Animation.standard, value: axGranted)
         .onAppear {

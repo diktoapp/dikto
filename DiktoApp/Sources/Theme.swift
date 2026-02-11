@@ -78,14 +78,16 @@ enum Theme {
     // MARK: Layout
 
     enum Layout {
-        static let menuBarWidth:     CGFloat = 280
-        static let settingsWidth:    CGFloat = 440
-        static let settingsHeight:   CGFloat = 500
-        static let onboardingWidth:  CGFloat = 480
-        static let onboardingHeight: CGFloat = 520
-        static let overlayWidth:     CGFloat = 360
-        static let overlayHeight:    CGFloat = 56
-        static let recordingDotSize: CGFloat = 10
+        static let menuBarWidth:      CGFloat = 280
+        static let settingsWidth:     CGFloat = 680
+        static let settingsHeight:    CGFloat = 520
+        static let settingsMinHeight: CGFloat = 400
+        static let sidebarWidth:      CGFloat = 220
+        static let onboardingWidth:   CGFloat = 480
+        static let onboardingHeight:  CGFloat = 520
+        static let overlayWidth:      CGFloat = 360
+        static let overlayHeight:     CGFloat = 56
+        static let recordingDotSize:  CGFloat = 10
     }
 
     // MARK: Icon Sizes

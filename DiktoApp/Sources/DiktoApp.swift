@@ -25,7 +25,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.settingsWidth, height: Theme.Layout.settingsHeight),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -33,7 +33,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.title = "Dikto Settings"
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.toolbarStyle = .unified
         // This is the key: moveToActiveSpace prevents Space switching
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()

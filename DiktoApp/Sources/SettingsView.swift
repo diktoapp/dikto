@@ -11,28 +11,27 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        TabView(selection: $appState.selectedSettingsTab) {
-            GeneralSettingsView()
-                .environmentObject(appState)
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
-                .tag(SettingsTab.general)
-
-            ModelsSettingsView()
-                .environmentObject(appState)
-                .tabItem {
-                    Label("Models", systemImage: "cpu")
-                }
-                .tag(SettingsTab.models)
-
-            PermissionsSettingsView()
-                .environmentObject(appState)
-                .tabItem {
-                    Label("Permissions", systemImage: "lock.shield")
-                }
-                .tag(SettingsTab.permissions)
+        NavigationSplitView {
+            List(selection: $appState.selectedSettingsTab) {
+                Label("General", systemImage: "gear")
+                    .tag(SettingsTab.general)
+                Label("Models", systemImage: "cpu")
+                    .tag(SettingsTab.models)
+                Label("Permissions", systemImage: "lock.shield")
+                    .tag(SettingsTab.permissions)
+            }
+            .navigationSplitViewColumnWidth(Theme.Layout.sidebarWidth)
+        } detail: {
+            switch appState.selectedSettingsTab {
+            case .general:
+                GeneralSettingsView().environmentObject(appState)
+            case .models:
+                ModelsSettingsView().environmentObject(appState)
+            case .permissions:
+                PermissionsSettingsView().environmentObject(appState)
+            }
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(width: Theme.Layout.settingsWidth, height: Theme.Layout.settingsHeight)
     }
 }
@@ -114,15 +113,14 @@ struct GeneralSettingsView: View {
     @State private var keyMonitor: Any?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    Toggle("Launch Dikto at login", isOn: $launchAtLogin)
-                        .onChange(of: launchAtLogin) { guard loaded else { return }; setLaunchAtLogin(launchAtLogin) }
-                        .help("Automatically start Dikto when you log in")
-                }
+        Form {
+            Section {
+                Toggle("Launch Dikto at login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { guard loaded else { return }; setLaunchAtLogin(launchAtLogin) }
+                    .help("Automatically start Dikto when you log in")
+            }
 
-                Section("Shortcut") {
+            Section("Shortcut") {
                     HStack {
                         Text("Hotkey")
                         Spacer()
@@ -247,9 +245,8 @@ struct GeneralSettingsView: View {
                         .help("Stop recording after this duration of silence")
                     }
                 }
-            }
-            .formStyle(.grouped)
         }
+        .formStyle(.grouped)
         .onAppear { loadSettings() }
         .onReceive(appState.$config) { _ in if !loaded { loadSettings() } }
         .onReceive(appState.$availableLanguages) { _ in
@@ -369,27 +366,26 @@ struct ModelsSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        Form {
             if noModelReady {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Theme.Colors.statusWarning)
-                        .font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("No model installed")
-                            .fontWeight(.medium)
-                            .font(Theme.Typography.callout)
-                        Text("Download a model below to start using Dikto. Whisper Tiny is recommended for a quick start.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(.secondary)
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.Colors.statusWarning)
+                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("No model installed")
+                                .fontWeight(.medium)
+                                .font(Theme.Typography.callout)
+                            Text("Download a model below to start using Dikto. Whisper Tiny is recommended for a quick start.")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .padding(Theme.Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.Colors.badgeWarning)
             }
 
-            List {
+            Section("Available Models") {
                 ForEach(appState.models, id: \.name) { model in
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -448,20 +444,19 @@ struct ModelsSettingsView: View {
                     .padding(.vertical, Theme.Spacing.xxs)
                 }
             }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
 
-            HStack {
-                Text("Or via terminal:")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-                Text("dikto --setup --model <name>")
-                    .font(Theme.Typography.mono)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            Section {
+                HStack {
+                    Text("Or via terminal:")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.secondary)
+                    Text("dikto --setup --model <name>")
+                        .font(Theme.Typography.mono)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.vertical, 10)
         }
+        .formStyle(.grouped)
         .onAppear { appState.refreshModels() }
     }
 
