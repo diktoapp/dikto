@@ -45,9 +45,6 @@ enum Theme {
         static let badgeDenied      = Color.red.opacity(0.12)
         static let badgeWarning     = Color.orange.opacity(0.10)
 
-        static let tagParakeet      = Color.blue.opacity(0.12)
-        static let tagWhisper       = Color.purple.opacity(0.12)
-
         static let cardBackground   = Color(nsColor: .controlBackgroundColor)
         static let menuHover        = Color.primary.opacity(0.08)
         static let overlayBorder    = Color.primary.opacity(0.1)
@@ -118,25 +115,3 @@ struct StatusBadge: View {
     }
 }
 
-/// Reusable backend tag (e.g. "Parakeet", "Whisper") for model lists.
-struct BackendTag: View {
-    let backend: String
-
-    private var backgroundColor: Color {
-        backend == "Parakeet" ? Theme.Colors.tagParakeet : Theme.Colors.tagWhisper
-    }
-
-    private var foregroundColor: Color {
-        backend == "Parakeet" ? .blue : .purple
-    }
-
-    var body: some View {
-        Text(backend)
-            .font(Theme.Typography.monoSmall)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(backgroundColor)
-            .foregroundStyle(foregroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
-    }
-}

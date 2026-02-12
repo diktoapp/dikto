@@ -377,7 +377,7 @@ struct ModelsSettingsView: View {
                             Text("No model installed")
                                 .fontWeight(.medium)
                                 .font(Theme.Typography.callout)
-                            Text("Download a model below to start using Dikto. Whisper Tiny is recommended for a quick start.")
+                            Text("Download a model below to start using Dikto. Parakeet TDT 0.6B v2 is recommended for best accuracy.")
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -397,7 +397,6 @@ struct ModelsSettingsView: View {
                                         .foregroundStyle(Theme.Colors.statusActive)
                                         .font(Theme.Typography.caption)
                                 }
-                                BackendTag(backend: model.backend)
                             }
                             Text(model.description)
                                 .font(Theme.Typography.caption)
