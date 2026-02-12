@@ -73,7 +73,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Theme.Layout.onboardingWidth, height: Theme.Layout.onboardingHeight),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -83,6 +83,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
         window.makeKeyAndOrderFront(nil)

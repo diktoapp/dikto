@@ -84,7 +84,7 @@ enum Theme {
         static let settingsMinHeight: CGFloat = 400
         static let sidebarWidth:      CGFloat = 220
         static let onboardingWidth:   CGFloat = 480
-        static let onboardingHeight:  CGFloat = 520
+        static let onboardingHeight:  CGFloat = 500
         static let overlayWidth:      CGFloat = 360
         static let overlayHeight:     CGFloat = 56
         static let recordingDotSize:  CGFloat = 10
@@ -114,7 +114,7 @@ struct StatusBadge: View {
                 .font(.caption2)
                 .fontWeight(.medium)
         }
-        .foregroundStyle(granted ? Theme.Colors.statusActive : Theme.Colors.statusError)
+        .foregroundStyle(granted ? Theme.Colors.statusActive : .secondary)
     }
 }
 

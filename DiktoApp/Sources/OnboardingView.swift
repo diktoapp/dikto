@@ -36,21 +36,13 @@ struct OnboardingView: View {
             .padding(.top, Theme.Spacing.lg)
             .padding(.horizontal, Theme.Spacing.xl)
 
-            // ─── STEP DOTS ───
+            // ─── STEP INDICATOR ───
             if totalSteps > 1 {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(0..<totalSteps, id: \.self) { i in
-                        Circle()
-                            .fill(i == currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
-                            .frame(
-                                width: i == currentStep ? 8 : 6,
-                                height: i == currentStep ? 8 : 6
-                            )
-                            .animation(Theme.Animation.spring, value: currentStep)
-                    }
-                }
-                .padding(.top, Theme.Spacing.sm)
-                .padding(.bottom, Theme.Spacing.sm)
+                Text("Step \(currentStep + 1) of \(totalSteps) · \(currentStep == 0 ? "Permissions" : "Model Setup")")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, Theme.Spacing.sm)
+                    .padding(.bottom, Theme.Spacing.sm)
             } else {
                 Spacer()
                     .frame(height: Theme.Spacing.sm)
@@ -148,10 +140,10 @@ struct OnboardingView: View {
                         Image(systemName: "chevron.left")
                         Text("Back")
                     }
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .foregroundStyle(.secondary)
                 .disabled(downloadingModelName != nil)
             }
 
@@ -164,13 +156,13 @@ struct OnboardingView: View {
                         handlePermissionsContinue()
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 } else {
                     Button("Skip for now") {
                         handlePermissionsSkip()
                     }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                     .foregroundStyle(.secondary)
                 }
             } else if currentStep == 1 {
@@ -179,13 +171,13 @@ struct OnboardingView: View {
                         OnboardingWindowController.shared.animatedDismiss()
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 } else {
                     Button("Skip for now") {
                         OnboardingWindowController.shared.animatedDismiss()
                     }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -205,7 +197,7 @@ struct OnboardingView: View {
                 permissionCard(icon: "accessibility", title: "Accessibility",
                     description: "Auto-paste transcriptions into your active app.",
                     granted: axGranted) {
-                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.small) }
+                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.regular) }
                 }
             } footer: {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -301,27 +293,19 @@ struct OnboardingView: View {
     private func modelRow(_ model: ModelInfoRecord) -> some View {
         HStack(spacing: Theme.Spacing.md) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
-                Text(model.name)
-                    .fontWeight(.medium)
                 HStack(spacing: Theme.Spacing.xs) {
-                    BackendTag(backend: model.backend)
-                    if model.name == "whisper-tiny" {
-                        highlightTag("Fastest Download", color: .green)
-                    } else if model.name == "parakeet-tdt-0.6b-v2" {
-                        highlightTag("Best Accuracy", color: .blue)
+                    Text(model.name)
+                        .fontWeight(.medium)
+                    if model.name == "parakeet-tdt-0.6b-v2" {
+                        Text("(Best Accuracy)")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
                     }
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(formatSize(model.sizeMb))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.tertiary)
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(model.description)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
+                Text("\(formatSize(model.sizeMb)) · \(model.description)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: Theme.Spacing.xxs)
@@ -385,12 +369,12 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
                 HStack(spacing: Theme.Spacing.sm) {
                     Text(title)
-                        .fontWeight(.medium)
+                        .font(.headline)
                         .lineLimit(1)
                     StatusBadge(granted: granted)
                 }
                 Text(description)
-                    .font(Theme.Typography.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -412,12 +396,12 @@ struct OnboardingView: View {
             Button("Allow Microphone") {
                 requestMicrophoneAccess()
             }
-            .controlSize(.small)
+            .controlSize(.regular)
         case .denied, .restricted:
             Button("Open System Settings") {
                 openMicSettings()
             }
-            .controlSize(.small)
+            .controlSize(.regular)
         case .authorized:
             EmptyView()
         @unknown default:
