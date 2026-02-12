@@ -36,21 +36,13 @@ struct OnboardingView: View {
             .padding(.top, Theme.Spacing.lg)
             .padding(.horizontal, Theme.Spacing.xl)
 
-            // ─── STEP DOTS ───
+            // ─── STEP INDICATOR ───
             if totalSteps > 1 {
-                HStack(spacing: Theme.Spacing.sm) {
-                    ForEach(0..<totalSteps, id: \.self) { i in
-                        Circle()
-                            .fill(i == currentStep ? Color.accentColor : Color.secondary.opacity(0.3))
-                            .frame(
-                                width: i == currentStep ? 8 : 6,
-                                height: i == currentStep ? 8 : 6
-                            )
-                            .animation(Theme.Animation.spring, value: currentStep)
-                    }
-                }
-                .padding(.top, Theme.Spacing.sm)
-                .padding(.bottom, Theme.Spacing.sm)
+                Text("Step \(currentStep + 1) of \(totalSteps) · \(currentStep == 0 ? "Permissions" : "Model Setup")")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, Theme.Spacing.sm)
+                    .padding(.bottom, Theme.Spacing.sm)
             } else {
                 Spacer()
                     .frame(height: Theme.Spacing.sm)
@@ -169,8 +161,8 @@ struct OnboardingView: View {
                     Button("Skip for now") {
                         handlePermissionsSkip()
                     }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                     .foregroundStyle(.secondary)
                 }
             } else if currentStep == 1 {
@@ -184,8 +176,8 @@ struct OnboardingView: View {
                     Button("Skip for now") {
                         OnboardingWindowController.shared.animatedDismiss()
                     }
-                    .buttonStyle(.plain)
-                    .font(Theme.Typography.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -345,7 +337,7 @@ struct OnboardingView: View {
                         downloadingModelName = model.name
                         appState.downloadModel(name: model.name)
                     }
-                    .controlSize(.regular)
+                    .controlSize(.small)
                     .disabled(!appState.downloadProgress.isEmpty)
                 }
             }
