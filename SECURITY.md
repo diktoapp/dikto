@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 2.x     | :white_check_mark: |
-| 1.x     | :x:                |
+| 1.x     | :white_check_mark: |
+| < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -13,7 +13,7 @@ If you discover a security vulnerability in Dikto, please report it responsibly.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **security@dikto.dev** (or open a private security advisory on GitHub)
+Instead, please [open a private security advisory](https://github.com/diktoapp/dikto/security/advisories/new) on GitHub.
 
 ### What to include
 
@@ -24,9 +24,9 @@ Instead, please email: **security@dikto.dev** (or open a private security adviso
 
 ### Response timeline
 
-- **Acknowledgment:** Within 48 hours
-- **Initial assessment:** Within 1 week
-- **Fix timeline:** Depends on severity; critical issues targeted within 72 hours
+- **Acknowledgment:** We aim to respond within 48 hours
+- **Initial assessment:** Typically within 1 week
+- **Fix timeline:** Depends on severity; we prioritize critical issues
 
 ### Scope
 
