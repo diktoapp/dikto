@@ -140,10 +140,10 @@ struct OnboardingView: View {
                         Image(systemName: "chevron.left")
                         Text("Back")
                     }
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .foregroundStyle(.secondary)
                 .disabled(downloadingModelName != nil)
             }
 
@@ -156,7 +156,7 @@ struct OnboardingView: View {
                         handlePermissionsContinue()
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 } else {
                     Button("Skip for now") {
                         handlePermissionsSkip()
@@ -171,7 +171,7 @@ struct OnboardingView: View {
                         OnboardingWindowController.shared.animatedDismiss()
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 } else {
                     Button("Skip for now") {
                         OnboardingWindowController.shared.animatedDismiss()
@@ -197,7 +197,7 @@ struct OnboardingView: View {
                 permissionCard(icon: "accessibility", title: "Accessibility",
                     description: "Auto-paste transcriptions into your active app.",
                     granted: axGranted) {
-                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.small) }
+                    if !axGranted { Button("Grant Accessibility") { resetAndRequestAccessibility() }.controlSize(.regular) }
                 }
             } footer: {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -337,7 +337,7 @@ struct OnboardingView: View {
                         downloadingModelName = model.name
                         appState.downloadModel(name: model.name)
                     }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .disabled(!appState.downloadProgress.isEmpty)
                 }
             }
@@ -404,12 +404,12 @@ struct OnboardingView: View {
             Button("Allow Microphone") {
                 requestMicrophoneAccess()
             }
-            .controlSize(.small)
+            .controlSize(.regular)
         case .denied, .restricted:
             Button("Open System Settings") {
                 openMicSettings()
             }
-            .controlSize(.small)
+            .controlSize(.regular)
         case .authorized:
             EmptyView()
         @unknown default:
