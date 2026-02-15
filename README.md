@@ -17,6 +17,8 @@
   <a href="#quick-install">Install</a>
 </p>
 
+[Website](https://diktoapp.github.io) · [Download](https://github.com/diktoapp/dikto/releases/latest) · [Install](#quick-install) · [Discussions](https://github.com/diktoapp/dikto/discussions)
+
 ## Quick Install
 
 **One-liner** (downloads, verifies, installs, bypasses Gatekeeper):
