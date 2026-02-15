@@ -10,6 +10,8 @@ Voice-to-text for macOS. Records speech, transcribes locally. No cloud.
 [![Downloads](https://img.shields.io/github/downloads/diktoapp/dikto/total)](https://github.com/diktoapp/dikto/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[Website](https://diktoapp.github.io) · [Download](https://github.com/diktoapp/dikto/releases/latest) · [Install](#quick-install) · [Discussions](https://github.com/diktoapp/dikto/discussions)
+
 ## Quick Install
 
 **One-liner** (downloads, verifies, installs, bypasses Gatekeeper):
